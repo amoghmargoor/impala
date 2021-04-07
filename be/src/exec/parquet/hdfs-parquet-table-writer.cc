@@ -89,6 +89,10 @@ using namespace apache::thrift;
 static const string PARQUET_MEM_LIMIT_EXCEEDED =
     "HdfsParquetTableWriter::$0() failed to allocate $1 bytes for $2.";
 
+// Parquet file footer property that identifies the Parquet file writer.
+// This writer will populate it by "impala version" followed by version info. 
+static const string PARQUET_OBJECT_NAME_PROPERTY = "writer.model.name";
+
 DEFINE_bool_hidden(write_new_parquet_dictionary_encodings, false,
     "(Experimental) Write parquet files with PLAIN/RLE_DICTIONARY encoding instead of "
     "PLAIN_DICTIONARY as recommended by Parquet 2.0 standard");
@@ -1024,10 +1028,19 @@ Status HdfsParquetTableWriter::Init() {
   // Initialize file metadata
   file_metadata_.version = PARQUET_CURRENT_VERSION;
 
+  stringstream impala_version;
+  impala_version << "impala version " << GetDaemonBuildVersion();
+
   stringstream created_by;
-  created_by << "impala version " << GetDaemonBuildVersion()
+  created_by << impala_version.str()
              << " (build " << GetDaemonBuildHash() << ")";
   file_metadata_.__set_created_by(created_by.str());
+  
+  parquet::KeyValue model_name_kv = parquet::KeyValue();
+  model_name_kv.__set_key(PARQUET_OBJECT_NAME_PROPERTY);
+  model_name_kv.__set_value(impala_version.str());
+  file_metadata_.key_value_metadata.push_back(model_name_kv);
+  file_metadata_.__isset.key_value_metadata = true;
 
   // Default to snappy compressed
   THdfsCompression::type codec = THdfsCompression::SNAPPY;
