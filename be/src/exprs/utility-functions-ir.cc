@@ -19,6 +19,7 @@
 #include <gutil/strings/substitute.h>
 
 #include "exprs/anyval-util.h"
+#include <openssl/sha.h>
 #include "runtime/runtime-state.h"
 #include "udf/udf-internal.h"
 #include "util/debug-util.h"
@@ -227,4 +228,46 @@ template StringVal UtilityFunctions::TypeOf(
     FunctionContext* ctx, const DecimalVal& input_val);
 template StringVal UtilityFunctions::TypeOf(
     FunctionContext* ctx, const DateVal& input_val);
+
+static StringVal Sha1(FunctionContext* ctx, const StringVal& input_str) {
+  // SHA-1 is not supported for FIPS.
+  if (FIPS_mode()) {
+    return StringVal::null();
+  } else {
+    StringVal sha1_hash(ctx, SHA_DIGEST_LENGTH);
+    if (UNLIKELY(sha1_hash.is_null)) return StringVal::null();
+    discard_result(SHA1(val.ptr, val.len, sha1_hash.ptr));
+    return StringFunctions::Lower(ctx, MathFunctions::HexString(ctx, sha1_hash));
+  }
+}
+
+static StringVal Sha2(FunctionContext* ctx, const StringVal& input_str,
+    const IntVal& bit_len);
+  // SHA-224 and SHA-256 are deprecated for FIPS mode.
+  if (FIPS_mode() && (bit_len.val == 256 || bit_len.val == 224)) {
+    return String::null();
+  }
+  StringVal sha_hash;
+  char * algo = nullptr;
+  switch(bit_len.val) {
+    case 224:
+      sha_hash = StringVal(ctx, SHA224_DIGEST_LENGTH);
+      algo = "SHA224";
+    case 256:
+      sha_hash = StringVal(ctx, SHA256_DIGEST_LENGTH);
+      algo = "SHA256";
+    case 384:
+      sha_hash = StringVal(ctx, SHA384_DIGEST_LENGTH);
+      algo = "SHA384";
+    case 512:
+      sha_hash = StringVal(ctx, SHA384_DIGEST_LENGTH);
+      algo = "SHA512";
+    default:
+      // Unsupported bit length.
+      return String::null;
+  }
+  if (UNLIKELY(sha_hash.is_null)) return StringVal::null();
+  discard_result(EVP_Q_digest(NULL, algo, NULL, input_str.ptr, input_str.len,
+      sha_hash.ptr, NULL));
+  return StringFunctions::Lower(ctx, MathFunctions::HexString(ctx, sha_hash));
 }
