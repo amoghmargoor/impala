@@ -30,6 +30,7 @@
 #include <boost/unordered_map.hpp>
 
 #include <openssl/crypto.h>
+#include <openssl/sha.h>
 
 #include "codegen/llvm-codegen.h"
 #include "common/init.h"
@@ -5527,6 +5528,53 @@ TEST_P(ExprTest, MurmurHashFunction) {
 
   // Test NULL input returns NULL
   TestIsNull("murmur_hash(NULL)", TYPE_BIGINT);
+}
+
+/// Convert character array `str` of length `len` to hexadecimal.
+string toHex(char * str, int len) {
+  stringstream ss;
+  ss << hex << uppercase << setfill('0');
+  for (int i = 0; i < len; ++i) {
+    // setw is not sticky. stringstream only converts integral values,
+    // so a cast to int is required, but only convert the least significant byte to hex.
+    ss << setw(2) << (static_cast<int32_t>(str[i]) & 0xFF);
+  }
+  return boost::to_lower(ss.str());
+}
+
+TEST_P(ExprTest, SHAFunctions) {
+  unsigned char input[] = "compute sha digest";
+  unsigned char sha1[SHA_DIGEST_LENGTH];
+
+  SHA1(input, strlen(input), sha1);
+  string expected = toHex(sha1, SHA_DIGEST_LENGTH);
+  TestStringValue("sha1('" + input + "')", expected);
+
+  unsigned char sha224[SHA224_DIGEST_LENGTH];
+  SHA224(input, strlen(input), sha224);
+  expected = toHex(sha224, SHA224_DIGEST_LENGTH);
+  TestStringValue("sha2('" + input + "'" + ", 224" + ")", expected);
+
+  unsigned char sha256[SHA256_DIGEST_LENGTH];
+  SHA256(input, strlen(input), sha256);
+  expected = toHex(sha256, SHA256_DIGEST_LENGTH);
+  TestStringValue("sha2('" + input + "'" + ", 256" + ")", expected);
+
+  unsigned char sha384[SHA384_DIGEST_LENGTH];
+  SHA384(input, strlen(input), sha384);
+  expected = toHex(sha384, SHA384_DIGEST_LENGTH);
+  TestStringValue("sha2('" + input + "'" + ", 384" + ")", expected);
+
+  unsigned char sha512[SHA512_DIGEST_LENGTH];
+  SHA512(input, strlen(input), sha512);
+  expected = toHex(sha512, SHA512_DIGEST_LENGTH);
+  TestStringValue("sha2('" + input + "'" + ", 512" + ")", expected);
+
+  // Test Invalid Inputs
+  // 300 is invalid bit length
+  TestIsNull("sha2('" + input + "'" + ", 300" + ")", TYPE_STRING);
+  TestIsNull("sha1('')", TYPE_STRING);
+  TestIsNull("sha2('')", TYPE_STRING);
 }
 
 TEST_P(ExprTest, SessionFunctions) {
