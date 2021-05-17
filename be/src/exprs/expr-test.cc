@@ -5546,24 +5546,30 @@ std::string ToHex(const unsigned char * str, int len) {
 
 TEST_P(ExprTest, SHAFunctions) {
   unsigned char input[] = "compute sha digest";
-  unsigned char sha1[SHA_DIGEST_LENGTH];
-
   std::string sha1fn = std::string("sha1('") + "compute sha digest" + "')";
-  SHA1(input, 18, sha1);
-  std::string expected = ToHex(sha1, SHA_DIGEST_LENGTH);
-  TestStringValue(sha1fn, expected);
-
-
   std::string sha2fn = std::string("sha2('") + "compute sha digest";
-  unsigned char sha224[SHA224_DIGEST_LENGTH];
-  SHA224(input, 18, sha224);
-  expected = ToHex(sha224, SHA224_DIGEST_LENGTH);
-  TestStringValue(sha2fn + "', 224)", expected);
+  std::string expected;
 
-  unsigned char sha256[SHA256_DIGEST_LENGTH];
-  SHA256(input, 18, sha256);
-  expected = ToHex(sha256, SHA256_DIGEST_LENGTH);
-  TestStringValue(sha2fn + ", 256", expected);
+  if (FIPS_mode()) {
+    TestIsNull(sha1fn, TYPE_STRING);
+    TestIsNull(sha2fn + ", 224", TYPE_STRING);
+    TestIsNull(sha2fn + ", 256", TYPE_STRING);
+  } else {
+    unsigned char sha1[SHA_DIGEST_LENGTH];
+    SHA1(input, 18, sha1);
+    expected = ToHex(sha1, SHA_DIGEST_LENGTH);
+    TestStringValue(sha1fn, expected);
+
+    unsigned char sha224[SHA224_DIGEST_LENGTH];
+    SHA224(input, 18, sha224);
+    expected = ToHex(sha224, SHA224_DIGEST_LENGTH);
+    TestStringValue(sha2fn + "', 224)", expected);
+
+    unsigned char sha256[SHA256_DIGEST_LENGTH];
+    SHA256(input, 18, sha256);
+    expected = ToHex(sha256, SHA256_DIGEST_LENGTH);
+    TestStringValue(sha2fn + ", 256", expected);
+  }
 
   unsigned char sha384[SHA384_DIGEST_LENGTH];
   SHA384(input, 18, sha384);
@@ -5578,8 +5584,6 @@ TEST_P(ExprTest, SHAFunctions) {
   // Test Invalid Inputs
   // 300 is invalid bit length
   TestIsNull(sha2fn + ", 300" + ")", TYPE_STRING);
-  //TestIsNull("sha1('')", TYPE_STRING);
-  TestIsNull(sha2fn + "')", TYPE_STRING);
 }
 
 TEST_P(ExprTest, SessionFunctions) {
