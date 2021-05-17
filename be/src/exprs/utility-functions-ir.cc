@@ -237,6 +237,7 @@ template StringVal UtilityFunctions::TypeOf(
 StringVal UtilityFunctions::Sha1(FunctionContext* ctx, const StringVal& input_str) {
   // SHA-1 is not supported for FIPS.
   if (FIPS_mode()) {
+    ctx->SetError("sha1 is not supported in FIPS mode.");
     return StringVal::null();
   } else {
     StringVal sha1_hash(ctx, SHA_DIGEST_LENGTH);
@@ -250,6 +251,7 @@ StringVal UtilityFunctions::Sha2(FunctionContext* ctx, const StringVal& input_st
     const IntVal& bit_len) {
   // SHA-224 and SHA-256 are deprecated for FIPS mode.
   if (FIPS_mode() && (bit_len.val == 224 || bit_len.val == 256)) {
+    ctx->SetError("Only bit lengths 384 and 512 are supported in FIPS mode.");
     return StringVal::null();
   }
 
@@ -278,6 +280,7 @@ StringVal UtilityFunctions::Sha2(FunctionContext* ctx, const StringVal& input_st
       break;
     default:
       // Unsupported bit length.
+      ctx->SetError(Substitute("Bit Length $0 is not supported", bit_len.val).c_str());
       return StringVal::null();
   }
 
