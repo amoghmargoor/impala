@@ -5581,6 +5581,29 @@ TEST_P(ExprTest, SHAFunctions) {
   expected = ToHex(sha512, SHA512_DIGEST_LENGTH);
   TestStringValue(sha2fn + ", 512)", expected);
 
+  // Test empty strings. Empty string is valid input and produces hash.
+  if (!FIPS_mode()) {
+    SHA1("", 0, sha1);
+    expected = ToHex(sha1, SHA_DIGEST_LENGTH);
+    TestStringValue("sha1('')", expected)
+
+    SHA224("", 0, sha224);
+    expected = ToHex(sha224, SHA224_DIGEST_LENGTH);
+    TestStringValue("sha2('', 224)", expected);
+
+    SHA256("", 0, sha256);
+    expected = ToHex(sha256, SHA256_DIGEST_LENGTH);
+    TestStringValue("sha2('', 256)", expected);
+  }
+
+  SHA384("", 0, sha384);
+  expected = ToHex(sha384, SHA384_DIGEST_LENGTH);
+  TestStringValue("sha2('', 384)", expected);
+
+  SHA512("", 0, sha512);
+  expected = ToHex(sha512, SHA512_DIGEST_LENGTH);
+  TestStringValue("sha2('', 512)", expected);
+
   // Test Invalid Inputs
   TestIsNull("sha1(NULL)", TYPE_STRING);
   TestIsNull("sha2(NULL, 512)", TYPE_STRING);
