@@ -5582,6 +5582,9 @@ TEST_P(ExprTest, SHAFunctions) {
   TestStringValue(sha2fn + ", 512)", expected);
 
   // Test Invalid Inputs
+  TestIsNull("sha1(NULL)", TYPE_STRING);
+  TestIsNull("sha2(NULL, 512)", TYPE_STRING);
+  TestIsNull("sha2('foo', NULL)", TYPE_STRING);
   // 300 is invalid bit length
   TestError(sha2fn + ", 300)");
 }
