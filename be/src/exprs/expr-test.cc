@@ -5549,58 +5549,58 @@ TEST_P(ExprTest, SHAFunctions) {
   std::string sha1fn = std::string("sha1('compute sha digest')");
   std::string sha2fn = std::string("sha2('compute sha digest'");
   std::string expected;
+  unsigned char sha1[SHA_DIGEST_LENGTH];
+  unsigned char sha224[SHA224_DIGEST_LENGTH];
+  unsigned char sha256[SHA256_DIGEST_LENGTH];
+  unsigned char sha384[SHA384_DIGEST_LENGTH];
+  unsigned char sha512[SHA512_DIGEST_LENGTH];
 
   if (FIPS_mode()) {
     TestError(sha1fn);
     TestError(sha2fn + ", 224)");
     TestError(sha2fn + ", 256)");
   } else {
-    unsigned char sha1[SHA_DIGEST_LENGTH];
     SHA1(input, 18, sha1);
     expected = ToHex(sha1, SHA_DIGEST_LENGTH);
     TestStringValue(sha1fn, expected);
 
-    unsigned char sha224[SHA224_DIGEST_LENGTH];
     SHA224(input, 18, sha224);
     expected = ToHex(sha224, SHA224_DIGEST_LENGTH);
     TestStringValue(sha2fn + ", 224)", expected);
 
-    unsigned char sha256[SHA256_DIGEST_LENGTH];
     SHA256(input, 18, sha256);
     expected = ToHex(sha256, SHA256_DIGEST_LENGTH);
     TestStringValue(sha2fn + ", 256)", expected);
   }
 
-  unsigned char sha384[SHA384_DIGEST_LENGTH];
   SHA384(input, 18, sha384);
   expected = ToHex(sha384, SHA384_DIGEST_LENGTH);
   TestStringValue(sha2fn + ", 384)", expected);
 
-  unsigned char sha512[SHA512_DIGEST_LENGTH];
   SHA512(input, 18, sha512);
   expected = ToHex(sha512, SHA512_DIGEST_LENGTH);
   TestStringValue(sha2fn + ", 512)", expected);
 
   // Test empty strings. Empty string is valid input and produces hash.
   if (!FIPS_mode()) {
-    SHA1("", 0, sha1);
+    SHA1(input, 0, sha1);
     expected = ToHex(sha1, SHA_DIGEST_LENGTH);
-    TestStringValue("sha1('')", expected)
+    TestStringValue("sha1('')", expected);
 
-    SHA224("", 0, sha224);
+    SHA224(input, 0, sha224);
     expected = ToHex(sha224, SHA224_DIGEST_LENGTH);
     TestStringValue("sha2('', 224)", expected);
 
-    SHA256("", 0, sha256);
+    SHA256(input, 0, sha256);
     expected = ToHex(sha256, SHA256_DIGEST_LENGTH);
     TestStringValue("sha2('', 256)", expected);
   }
 
-  SHA384("", 0, sha384);
+  SHA384(input, 0, sha384);
   expected = ToHex(sha384, SHA384_DIGEST_LENGTH);
   TestStringValue("sha2('', 384)", expected);
 
-  SHA512("", 0, sha512);
+  SHA512(input, 0, sha512);
   expected = ToHex(sha512, SHA512_DIGEST_LENGTH);
   TestStringValue("sha2('', 512)", expected);
 
