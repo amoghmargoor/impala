@@ -274,7 +274,7 @@ StringVal UtilityFunctions::Sha2(FunctionContext* ctx, const StringVal& input_st
       discard_result(SHA384(input_str.ptr, input_str.len, sha_hash.ptr));
       break;
     case 512:
-      sha_hash = StringVal(ctx, SHA384_DIGEST_LENGTH);
+      sha_hash = StringVal(ctx, SHA512_DIGEST_LENGTH);
       if (UNLIKELY(sha_hash.is_null)) return StringVal::null();
       discard_result(SHA512(input_str.ptr, input_str.len, sha_hash.ptr));
       break;
