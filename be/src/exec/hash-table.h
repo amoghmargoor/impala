@@ -35,6 +35,7 @@
 #include "util/bitmap.h"
 #include "util/hash-util.h"
 #include "util/runtime-profile.h"
+#include "util/tagged-ptr.h"
 
 namespace llvm {
   class Function;
@@ -271,7 +272,8 @@ class HashTableCtx {
   /// followed by a read pass. We refrain from providing an interface for random accesses
   /// as there isn't a use case for it now and we want to avoid expensive multiplication
   /// as the buffer size of each row is not necessarily power of two:
-  /// - Reset(), ResetForRead(): reset the iterators before writing / reading cached values.
+  /// - Reset(), ResetForRead(): reset the iterators before writing / reading cached
+  /// values.
   /// - NextRow(): moves the iterators to point to the next row of cached values.
   /// - AtEnd(): returns true if all cached rows have been read. Valid in read mode only.
   ///
@@ -327,8 +329,8 @@ class HashTableCtx {
       return cur_expr_values_hash_ == cur_expr_values_hash_end_;
     }
 
-    /// Returns true if the current row is null but nulls are not considered in the current
-    /// phase (build or probe).
+    /// Returns true if the current row is null but nulls are not considered in the
+    /// current phase (build or probe).
     bool ALWAYS_INLINE IsRowNull() const { return null_bitmap_.Get(CurIdx()); }
 
     /// Record in a bitmap that the current row is null but nulls are not considered in
@@ -593,7 +595,7 @@ class HashTableCtx {
 
   /// Total distance traveled for each probe. That is the sum of the diff between the end
   /// position of a probe (find/insert) and its start position
-  /// (hash & (num_buckets_ - 1)).
+  /// '(hash & (num_buckets_ - 1))'.
   int64_t travel_length_ = 0;
 
   /// The number of cases where we had to compare buckets with the same hash value, but
@@ -645,54 +647,119 @@ class HashTable {
     Tuple* tuple;
   };
 
+  struct DuplicateNode; // Forward Declaration
+  class TaggedDuplicateNode : public TaggedPtr<DuplicateNode> {
+   public:
+    bool IsMatched() { return IsTagBitSet(0); }
+    void SetMatched() { SetTagBit(0); }
+    void UnsetMatched() { UnSetTagBit(0); }
+    void SetNode(DuplicateNode* node) { SetPtr(node); }
+    ~TaggedDuplicateNode() { SetPtr((DuplicateNode*)0); }
+  };
   /// struct DuplicateNode is referenced by SIZE_OF_DUPLICATENODE of
   /// planner/PlannerContext.java. If struct DuplicateNode is modified, please modify
   /// SIZE_OF_DUPLICATENODE synchronously.
   /// Linked list of entries used for duplicates.
   struct DuplicateNode {
-    /// Used for full outer and right {outer, anti, semi} joins. Indicates whether the
-    /// row in the DuplicateNode has been matched.
-    /// From an abstraction point of view, this is an awkward place to store this
-    /// information.
-    /// TODO: Fold this flag in the next pointer below.
-    bool matched;
-
-    /// Chain to next duplicate node, NULL when end of list.
-    DuplicateNode* next;
     HtData htdata;
+    DuplicateNode* Next() { return tdn.GetPtr(); }
+    void SetNext(DuplicateNode* node) { tdn.SetNode(node); }
+    bool IsMatched() { return tdn.IsMatched(); }
+    void SetMatched() { tdn.SetMatched(); }
+    void UnsetMatched() { tdn.UnsetMatched(); }
+
+   private:
+    /// Chain to next duplicate node, NULL when end of list.
+    /// 'bool matched' is folded into this next pointer. Tag bit 0 represents it.
+    TaggedDuplicateNode tdn;
+  };
+
+  union BucketData {
+    HtData htdata;
+    DuplicateNode* duplicates;
+  };
+
+  /// 'TaggedPtr' for 'BucketData'.
+  /// This doesn't own BucketData* so Allocation and Deallocation is not it's
+  /// resonsibility.
+  /// Following fields are also folded in the TagggedPtr below:
+  /// 1. bool filled: (Tag bit 0) Whether this bucket contains a vaild entry, or
+  ///    it is empty.
+  /// 2. bool matched: (Tag bit 1) Used for full outer and right {outer, anti, semi}
+  ///    joins. Indicates whether the row in the bucket has been matched.
+  ///    From an abstraction point of view, this is an awkward place to store this
+  ///    information but it is efficient. This space is otherwise unused.
+  /// 3. bool hasDuplicates: (Tag bit 2) Used in case of duplicates. If true, then
+  ///    the bucketData union should be used as 'duplicates'.
+  class TaggedBucketData : public TaggedPtr<uint8> {
+   public:
+    TaggedBucketData() = default;
+    bool IsFilled() { return IsTagBitSet(0); }
+    bool IsMatched() { return IsTagBitSet(1); }
+    bool HasDuplicates() { return IsTagBitSet(2); }
+    void SetFilled() { SetTagBit(0); }
+    void SetMatched() { SetTagBit(1); }
+    void SetHasDuplicates() { SetTagBit(2); }
+    void UnsetFilled() { UnSetTagBit(0); }
+    void UnsetMatched() { UnSetTagBit(1); }
+    void UnsetHasDuplicates() { UnSetTagBit(2); }
+    void SetDuplicate(DuplicateNode* duplicate) { SetPtr((uint8*) duplicate); }
+    void SetTuple(Tuple* tuple) { SetPtr((uint8*) tuple); }
+    void SetFlatRow(BufferedTupleStream::FlatRowPtr flat_row) {
+      SetPtr((uint8*) flat_row);
+    }
+    BucketData GetBucketData() {
+      uint8* ptr = GetPtr();
+      BucketData * bdPtr = reinterpret_cast<BucketData *>(&ptr);
+      return *bdPtr;
+    }
+    TaggedBucketData & operator=(const TaggedBucketData & bd) = default;
+    ~TaggedBucketData() { SetPtr((uint8*) 0); }
   };
 
   /// struct Bucket is referenced by SIZE_OF_BUCKET of planner/PlannerContext.java.
   /// If struct Bucket is modified, please modify SIZE_OF_BUCKET synchronously.
+  /// Couple of optimizations done for space:
+  /// 1. TaggedPtr is used to store BucketData. 3 booleans are folded into
+  ///    TaggedPtr. Check comments for TaggedBucketData for details on booleans
+  ///    stored.
+  /// 2. Bucket is attributted as packed with alignment of 4 to ensure no padding
+  ///    is used.
   struct Bucket {
-    /// Whether this bucket contains a vaild entry, or it is empty.
-    bool filled;
-
-    /// Used for full outer and right {outer, anti, semi} joins. Indicates whether the
-    /// row in the bucket has been matched.
-    /// From an abstraction point of view, this is an awkward place to store this
-    /// information but it is efficient. This space is otherwise unused.
-    bool matched;
-
-    /// Used in case of duplicates. If true, then the bucketData union should be used as
-    /// 'duplicates'.
-    bool hasDuplicates;
-
-    /// Cache of the hash for data.
-    /// TODO: Do we even have to cache the hash value?
-    uint32_t hash;
-
     /// Either the data for this bucket or the linked list of duplicates.
-    union {
-      HtData htdata;
-      DuplicateNode* duplicates;
-    } bucketData;
+    BucketData bucket_data() { return bd.GetBucketData(); }
+    /// Whether this bucket contains a vaild entry, or it is empty.
+    bool IsFilled() { return bd.IsFilled(); }
+    /// Indicates whether the row in the bucket has been matched.
+    /// For more details read the comment for TaggedBucketData.
+    bool IsMatched() { return bd.IsMatched(); }
+    /// Indicates if bucket has duplicates instead of data for bucket.
+    bool HasDuplicates() { return bd.HasDuplicates(); }
+
+    // Set/Unset methods corresponding to above.
+    void SetFilled() { bd.SetFilled(); }
+    void SetMatched() { bd.SetMatched(); }
+    void SetHasDuplicates() { bd.SetHasDuplicates(); }
+    void UnsetFilled() { bd.UnsetFilled(); }
+    void UnsetMatched() { bd.UnsetMatched(); }
+    void UnsetHasDuplicates() { bd.UnsetHasDuplicates(); }
+    // Setting Data or Duplicate Node
+    void SetDuplicate(DuplicateNode* node) { bd.SetDuplicate(node); }
+    void SetTuple(Tuple* tuple) { bd.SetTuple(tuple); }
+    void SetFlatRow(BufferedTupleStream::FlatRowPtr flat_row) {
+      bd.SetFlatRow(flat_row);
+    }
+   private:
+    // This should not be exposed outside as implementation details
+    // can change.
+    TaggedBucketData bd;
   };
 
-  static_assert(BitUtil::IsPowerOf2(sizeof(Bucket)),
-      "We assume that Hash-table bucket directories are a power-of-two sizes because "
-      "allocating only bucket directories with power-of-two byte sizes avoids internal "
-      "fragmentation in the simple buddy allocator.");
+  static_assert(BitUtil::IsPowerOf2(sizeof(Bucket) && sizeof(Bucket) == 8),
+      "We assume that Hash-table bucket directories are a power-of-two (8 bytes "
+      "currently) sizes because allocating only bucket directories with power-of-two "
+      "byte sizes avoids internal fragmentation in the simple buddy allocator. Assert "
+      "checks for fixed size to avoid accidental changes.");
 
  public:
   class Iterator;
@@ -774,6 +841,9 @@ class HashTable {
   Iterator IR_ALWAYS_INLINE FindBuildRowBucket(
       HashTableCtx* __restrict__ ht_ctx, bool* found);
 
+  /// Find slot for 'hash' from 0 to 'num_buckets'.
+  int64_t getBucketId(uint32_t hash, int64_t num_buckets);
+
   /// Returns number of elements inserted in the hash table
   /// Thread-safe for read-only hash tables.
   int64_t size() const {
@@ -807,7 +877,7 @@ class HashTable {
   }
 
   /// Return the size of a hash table bucket in bytes.
-  static int64_t BucketSize() { return sizeof(Bucket); }
+  static const int64_t BUCKET_SIZE = sizeof(Bucket);
 
   /// Returns the memory occupied by the hash table, takes into account the number of
   /// duplicates.
@@ -993,14 +1063,16 @@ class HashTable {
   ///
   /// There are wrappers of this function that perform the Find and Insert logic.
   template <bool INCLUSIVE_EQUALITY, bool COMPARE_ROW>
-  int64_t IR_ALWAYS_INLINE Probe(Bucket* buckets, int64_t num_buckets,
-      HashTableCtx* __restrict__ ht_ctx, uint32_t hash, bool* found);
+  int64_t IR_ALWAYS_INLINE Probe(Bucket* buckets, uint32_t* hash_array,
+      int64_t num_buckets, HashTableCtx* __restrict__ ht_ctx, uint32_t hash,
+      bool* found, BucketData* bd);
 
-  /// Performs the insert logic. Returns the HtData* of the bucket or duplicate node
-  /// where the data should be inserted. Returns NULL if the insert was not successful
-  /// and either sets 'status' to OK if it failed because not enough reservation was
-  /// available or the error if an error was encountered.
-  HtData* IR_ALWAYS_INLINE InsertInternal(
+  /// Performs the insert logic. Returns the Bucket* of the bucket where the data
+  /// should be inserted either in the bucket itself or in it's DuplicateNode.
+  /// Returns NULL if the insert was not successful and either sets 'status' to OK
+  /// if it failed because not enough reservation was available or the error if an
+  /// error was encountered.
+  Bucket* IR_ALWAYS_INLINE InsertInternal(
       HashTableCtx* __restrict__ ht_ctx, Status* status);
 
   /// Updates 'bucket_idx' to the index of the next non-empty bucket. If the bucket has
@@ -1038,12 +1110,16 @@ class HashTable {
 
   /// Returns the TupleRow of the pointed 'bucket'. In case of duplicates, it
   /// returns the content of the first chained duplicate node of the bucket.
-  TupleRow* GetRow(Bucket* bucket, TupleRow* row) const;
+  /// It also fills 'bd' with the BucketData of 'bucket'.
+  TupleRow* GetRow(Bucket* bucket, TupleRow* row, BucketData* bd) const;
 
   /// Grow the node array. Returns true and sets 'status' to OK on success. Returns false
   /// and set 'status' to OK if we can't get sufficient reservation to allocate the next
   /// data page. Returns false and sets 'status' if another error is encountered.
   bool GrowNodeArray(Status* status);
+
+  /// Reset HashTable's internal state to Default State
+  void ResetState();
 
   /// Functions to be replaced by codegen to specialize the hash table.
   bool IR_NO_INLINE stores_tuples() const { return stores_tuples_; }
@@ -1104,6 +1180,14 @@ class HashTable {
   /// Pointer to the 'buckets_' array from 'bucket_allocation_'.
   Bucket* buckets_ = nullptr;
 
+  /// Allocation containing the cached hash value for every bucket.
+  std::unique_ptr<Suballocation> hash_allocation_;
+
+  /// Cache of the hash for data. It is an array of hash values where ith value
+  /// corresponds to hash value of ith bucket in 'buckets_' array.
+  /// This is not part of struct 'Bucket' to make sure 'sizeof(Bucket)' is power of 2.
+  uint32_t* hash_array_;
+
   /// Total number of buckets (filled and empty).
   int64_t num_buckets_;
 
@@ -1125,4 +1209,4 @@ class HashTable {
   int64_t num_resizes_ = 0;
 };
 
-}
+} // namespace impala

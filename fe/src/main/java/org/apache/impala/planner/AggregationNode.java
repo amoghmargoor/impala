@@ -567,7 +567,8 @@ public class AggregationNode extends PlanNode {
       // The memory of the data stored in hash table and the memory of the
       // hash table‘s structure
       perInstanceDataBytes = (long)Math.ceil(perInstanceCardinality *
-                                  (avgRowSize_ + PlannerContext.SIZE_OF_BUCKET));
+                                  (avgRowSize_ + PlannerContext.SIZE_OF_BUCKET +
+                                   PlannerContext.SIZE_OF_HASH));
       if (aggInfo.getGroupingExprs().isEmpty()) {
         perInstanceMemEstimate = MIN_PLAIN_AGG_MEM;
       } else {
