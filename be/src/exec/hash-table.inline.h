@@ -106,7 +106,7 @@ inline HashTable::Bucket* HashTable::InsertInternal(
   DCHECK_NE(bucket_idx, Iterator::BUCKET_NOT_FOUND);
   if (found) {
     // We need to insert a duplicate node, note that this may fail to allocate memory.
-    DuplicateNode* new_node = InsertDuplicateNode(bucket_idx, status);
+    DuplicateNode* new_node = InsertDuplicateNode(bucket_idx, status, &bd);
     if (UNLIKELY(new_node == NULL)) return NULL;
   } else {
     PrepareBucketForInsert(bucket_idx, hash);
@@ -234,21 +234,22 @@ inline HashTable::DuplicateNode* HashTable::AppendNextNode(Bucket* bucket) {
 }
 
 inline HashTable::DuplicateNode* HashTable::InsertDuplicateNode(
-    int64_t bucket_idx, Status* status) {
+    int64_t bucket_idx, Status* status, BucketData* bucket_data) {
   DCHECK_GE(bucket_idx, 0);
   DCHECK_LT(bucket_idx, num_buckets_);
   Bucket* bucket = &buckets_[bucket_idx];
   DCHECK(bucket->IsFilled());
   DCHECK(stores_duplicates());
+  bool has_duplicates = bucket->HasDuplicates();
   // Allocate one duplicate node for the new data and one for the preexisting data,
   // if needed.
-  while (node_remaining_current_page_ < 1 + !bucket->HasDuplicates()) {
+  while (node_remaining_current_page_ < 1 + !has_duplicates) {
     if (UNLIKELY(!GrowNodeArray(status))) return NULL;
   }
-  if (!bucket->HasDuplicates()) {
+  if (!has_duplicates) {
     // This is the first duplicate in this bucket. It means that we need to convert
     // the current entry in the bucket to a node and link it from the bucket.
-    next_node_->htdata.flat_row = bucket->bucket_data().htdata.flat_row;
+    next_node_->htdata.flat_row = bucket_data.htdata.flat_row;
     DCHECK(!bucket->IsMatched());
     next_node_->UnsetMatched();
     next_node_->SetNext(nullptr);

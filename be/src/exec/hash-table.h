@@ -1099,7 +1099,8 @@ class HashTable {
   /// Returns NULL and sets 'status' to OK if the node array could not grow, i.e. there
   /// was not enough memory to allocate a new DuplicateNode. Returns NULL and sets
   /// 'status' to an error if another error was encountered.
-  DuplicateNode* IR_ALWAYS_INLINE InsertDuplicateNode(int64_t bucket_idx, Status* status);
+  DuplicateNode* IR_ALWAYS_INLINE InsertDuplicateNode(int64_t bucket_idx, Status* status,
+    BucketData* bucket_data);
 
   /// Resets the contents of the empty bucket with index 'bucket_idx', in preparation for
   /// an insert. Sets all the fields of the bucket other than 'data'.
