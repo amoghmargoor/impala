@@ -719,7 +719,8 @@ class HashTable {
       SetPtr((uint8*) flat_row);
     }
     ALWAYS_INLINE BucketData GetBucketData() {
-      return reinterpret_cast<BucketData>(GetPtr());
+      uint8* ptr = GetPtr();
+      return *(reinterpret_cast<BucketData *>(&ptr));
     }
     ALWAYS_INLINE void PrepareBucketForInsert() {
       // Sets filled, unsets matched, duplicate and ptr
