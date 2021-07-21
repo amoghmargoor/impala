@@ -650,10 +650,15 @@ class HashTable {
   struct DuplicateNode; // Forward Declaration
   class TaggedDuplicateNode : public TaggedPtr<DuplicateNode> {
    public:
-    bool IsMatched() { return IsTagBitSet(0); }
-    void SetMatched() { SetTagBit(0); }
-    void UnsetMatched() { UnSetTagBit(0); }
-    void SetNode(DuplicateNode* node) { SetPtr(node); }
+    ALWAYS_INLINE bool IsMatched() { return IsTagBitSet0(); }
+    ALWAYS_INLINE void SetMatched() { SetTagBit0(); }
+    ALWAYS_INLINE void UnsetMatched() { UnSetTagBit0(); }
+    ALWAYS_INLINE void SetNode(DuplicateNode* node) { SetPtr(node); }
+    // Set Node and UnsetMatched
+    ALWAYS_INLINE void SetNodeUnMatched(DuplicateNode* node) {
+      SetData((uintptr_t) node);
+      DCHECK(!IsMatched());
+    }
     ~TaggedDuplicateNode() { SetPtr((DuplicateNode*)0); }
   };
   /// struct DuplicateNode is referenced by SIZE_OF_DUPLICATENODE of
@@ -662,11 +667,14 @@ class HashTable {
   /// Linked list of entries used for duplicates.
   struct DuplicateNode {
     HtData htdata;
-    DuplicateNode* Next() { return tdn.GetPtr(); }
-    void SetNext(DuplicateNode* node) { tdn.SetNode(node); }
-    bool IsMatched() { return tdn.IsMatched(); }
-    void SetMatched() { tdn.SetMatched(); }
-    void UnsetMatched() { tdn.UnsetMatched(); }
+    ALWAYS_INLINE DuplicateNode* Next() { return tdn.GetPtr(); }
+    ALWAYS_INLINE void SetNext(DuplicateNode* node) { tdn.SetNode(node); }
+    ALWAYS_INLINE bool IsMatched() { return tdn.IsMatched(); }
+    ALWAYS_INLINE void SetMatched() { tdn.SetMatched(); }
+    ALWAYS_INLINE void UnsetMatched() { tdn.UnsetMatched(); }
+    ALWAYS_INLINE void SetNextUnMatched(DuplicateNode* node) {
+      tdn.SetNodeUnMatched(node);
+    }
 
    private:
     /// Chain to next duplicate node, NULL when end of list.
@@ -694,25 +702,30 @@ class HashTable {
   class TaggedBucketData : public TaggedPtr<uint8> {
    public:
     TaggedBucketData() = default;
-    bool IsFilled() { return IsTagBitSet(0); }
-    bool IsMatched() { return IsTagBitSet(1); }
-    bool HasDuplicates() { return IsTagBitSet(2); }
-    void SetFilled() { SetTagBit(0); }
-    void SetMatched() { SetTagBit(1); }
-    void SetHasDuplicates() { SetTagBit(2); }
-    void UnsetFilled() { UnSetTagBit(0); }
-    void UnsetMatched() { UnSetTagBit(1); }
-    void UnsetHasDuplicates() { UnSetTagBit(2); }
-    void SetDuplicate(DuplicateNode* duplicate) { SetPtr((uint8*) duplicate); }
-    void SetTuple(Tuple* tuple) { SetPtr((uint8*) tuple); }
-    void SetFlatRow(BufferedTupleStream::FlatRowPtr flat_row) {
+    ALWAYS_INLINE bool IsFilled() { return IsTagBitSet0(); }
+    ALWAYS_INLINE bool IsMatched() { return IsTagBitSet1(); }
+    ALWAYS_INLINE bool HasDuplicates() { return IsTagBitSet2(); }
+    ALWAYS_INLINE void SetFilled() { SetTagBit0(); }
+    ALWAYS_INLINE void SetMatched() { SetTagBit1(); }
+    ALWAYS_INLINE void SetHasDuplicates() { SetTagBit2(); }
+    ALWAYS_INLINE void UnsetFilled() { UnSetTagBit0(); }
+    ALWAYS_INLINE void UnsetMatched() { UnSetTagBit1(); }
+    ALWAYS_INLINE void UnsetHasDuplicates() { UnSetTagBit2(); }
+    ALWAYS_INLINE void SetDuplicate(DuplicateNode* duplicate) {
+      SetPtr((uint8*) duplicate);
+    }
+    ALWAYS_INLINE void SetTuple(Tuple* tuple) { SetPtr((uint8*) tuple); }
+    ALWAYS_INLINE void SetFlatRow(BufferedTupleStream::FlatRowPtr flat_row) {
       SetPtr((uint8*) flat_row);
     }
-    BucketData GetBucketData() {
-      uint8* ptr = GetPtr();
-      BucketData * bdPtr = reinterpret_cast<BucketData *>(&ptr);
-      return *bdPtr;
+    ALWAYS_INLINE BucketData GetBucketData() {
+      return reinterpret_cast<BucketData>(GetPtr());
     }
+    ALWAYS_INLINE void PrepareBucketForInsert() {
+      // Sets filled, unsets matched, duplicate and ptr
+      SetData(0x8000000000000000);
+    }
+
     TaggedBucketData & operator=(const TaggedBucketData & bd) = default;
     ~TaggedBucketData() { SetPtr((uint8*) 0); }
   };
@@ -727,27 +740,30 @@ class HashTable {
   ///    is used.
   struct Bucket {
     /// Either the data for this bucket or the linked list of duplicates.
-    BucketData bucket_data() { return bd.GetBucketData(); }
+    ALWAYS_INLINE BucketData bucket_data() { return bd.GetBucketData(); }
     /// Whether this bucket contains a vaild entry, or it is empty.
-    bool IsFilled() { return bd.IsFilled(); }
+    ALWAYS_INLINE bool IsFilled() { return bd.IsFilled(); }
     /// Indicates whether the row in the bucket has been matched.
     /// For more details read the comment for TaggedBucketData.
-    bool IsMatched() { return bd.IsMatched(); }
+    ALWAYS_INLINE bool IsMatched() { return bd.IsMatched(); }
     /// Indicates if bucket has duplicates instead of data for bucket.
-    bool HasDuplicates() { return bd.HasDuplicates(); }
+    ALWAYS_INLINE bool HasDuplicates() { return bd.HasDuplicates(); }
 
     // Set/Unset methods corresponding to above.
-    void SetFilled() { bd.SetFilled(); }
-    void SetMatched() { bd.SetMatched(); }
-    void SetHasDuplicates() { bd.SetHasDuplicates(); }
-    void UnsetFilled() { bd.UnsetFilled(); }
-    void UnsetMatched() { bd.UnsetMatched(); }
-    void UnsetHasDuplicates() { bd.UnsetHasDuplicates(); }
+    ALWAYS_INLINE void SetFilled() { bd.SetFilled(); }
+    ALWAYS_INLINE void SetMatched() { bd.SetMatched(); }
+    ALWAYS_INLINE void SetHasDuplicates() { bd.SetHasDuplicates(); }
+    ALWAYS_INLINE void UnsetFilled() { bd.UnsetFilled(); }
+    ALWAYS_INLINE void UnsetMatched() { bd.UnsetMatched(); }
+    ALWAYS_INLINE void UnsetHasDuplicates() { bd.UnsetHasDuplicates(); }
     // Setting Data or Duplicate Node
-    void SetDuplicate(DuplicateNode* node) { bd.SetDuplicate(node); }
-    void SetTuple(Tuple* tuple) { bd.SetTuple(tuple); }
-    void SetFlatRow(BufferedTupleStream::FlatRowPtr flat_row) {
+    ALWAYS_INLINE void SetDuplicate(DuplicateNode* node) { bd.SetDuplicate(node); }
+    ALWAYS_INLINE void SetTuple(Tuple* tuple) { bd.SetTuple(tuple); }
+    ALWAYS_INLINE void SetFlatRow(BufferedTupleStream::FlatRowPtr flat_row) {
       bd.SetFlatRow(flat_row);
+    }
+    ALWAYS_INLINE void PrepareBucketForInsert() {
+      bd.PrepareBucketForInsert();
     }
    private:
     // This should not be exposed outside as implementation details

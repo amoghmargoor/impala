@@ -15,7 +15,6 @@
 // specific language governing permissions and limitations
 // under the License.
 
-
 #ifndef IMPALA_EXEC_HASH_TABLE_INLINE_H
 #define IMPALA_EXEC_HASH_TABLE_INLINE_H
 
@@ -50,14 +49,14 @@ inline void HashTableCtx::ExprValuesCache::NextRow() {
 
 template <bool INCLUSIVE_EQUALITY, bool COMPARE_ROW>
 inline int64_t HashTable::Probe(Bucket* buckets, uint32_t* hash_array,
-    int64_t num_buckets, HashTableCtx* __restrict__ ht_ctx, uint32_t hash,
-    bool* found, BucketData* bd) {
+    int64_t num_buckets, HashTableCtx* __restrict__ ht_ctx, uint32_t hash, bool* found,
+    BucketData* bd) {
   DCHECK(ht_ctx != nullptr);
   DCHECK(buckets != nullptr);
   DCHECK_GT(num_buckets, 0);
   *found = false;
   ++ht_ctx->num_probes_;
-  int64_t bucket_idx = hash & (num_buckets -1);
+  int64_t bucket_idx = hash & (num_buckets - 1);
 
   // In case of linear probing it counts the total number of steps for statistics and
   // for knowing when to exit the loop (e.g. by capping the total travel length). In case
@@ -67,8 +66,9 @@ inline int64_t HashTable::Probe(Bucket* buckets, uint32_t* hash_array,
     Bucket* bucket = &buckets[bucket_idx];
     if (LIKELY(!bucket->IsFilled())) return bucket_idx;
     if (hash == hash_array[bucket_idx]) {
-      if (COMPARE_ROW &&
-          ht_ctx->Equals<INCLUSIVE_EQUALITY>(GetRow(bucket, ht_ctx->scratch_row_, bd))) {
+      if (COMPARE_ROW
+          && ht_ctx->Equals<INCLUSIVE_EQUALITY>(
+              GetRow(bucket, ht_ctx->scratch_row_, bd))) {
         *found = true;
         return bucket_idx;
       }
@@ -80,9 +80,9 @@ inline int64_t HashTable::Probe(Bucket* buckets, uint32_t* hash_array,
     ++step;
     ++ht_ctx->travel_length_;
     if (quadratic_probing()) {
-      // The i-th probe location is idx = (hash + (step * (step + 1)) / 2) mod num_buckets.
-      // This gives num_buckets unique idxs (between 0 and N-1) when num_buckets is a power
-      // of 2.
+      // The i-th probe location is idx = (hash + (step * (step + 1)) / 2) mod
+      // num_buckets. This gives num_buckets unique idxs (between 0 and N-1) when
+      // num_buckets is a power of 2.
       bucket_idx = (bucket_idx + step) & (num_buckets - 1);
     } else {
       // Linear probing
@@ -101,8 +101,8 @@ inline HashTable::Bucket* HashTable::InsertInternal(
   bool found = false;
   uint32_t hash = ht_ctx->expr_values_cache()->CurExprValuesHash();
   BucketData bd;
-  int64_t bucket_idx = Probe<true, true>(buckets_, hash_array_, num_buckets_, ht_ctx,
-    hash, &found, &bd);
+  int64_t bucket_idx =
+      Probe<true, true>(buckets_, hash_array_, num_buckets_, ht_ctx, hash, &found, &bd);
   DCHECK_NE(bucket_idx, Iterator::BUCKET_NOT_FOUND);
   if (found) {
     // We need to insert a duplicate node, note that this may fail to allocate memory.
@@ -154,8 +154,8 @@ inline HashTable::Iterator HashTable::FindProbeRow(HashTableCtx* __restrict__ ht
   bool found = false;
   uint32_t hash = ht_ctx->expr_values_cache()->CurExprValuesHash();
   BucketData bd;
-  int64_t bucket_idx = Probe<false, true>(buckets_, hash_array_, num_buckets_, ht_ctx,
-    hash, &found, &bd);
+  int64_t bucket_idx =
+      Probe<false, true>(buckets_, hash_array_, num_buckets_, ht_ctx, hash, &found, &bd);
   if (found) {
     return Iterator(this, ht_ctx->scratch_row(), bucket_idx,
         stores_duplicates() ? bd.duplicates : NULL);
@@ -168,8 +168,8 @@ inline HashTable::Iterator HashTable::FindBuildRowBucket(
     HashTableCtx* __restrict__ ht_ctx, bool* found) {
   uint32_t hash = ht_ctx->expr_values_cache()->CurExprValuesHash();
   BucketData bd;
-  int64_t bucket_idx = Probe<true, true>(buckets_, hash_array_, num_buckets_, ht_ctx,
-    hash, found, &bd);
+  int64_t bucket_idx =
+      Probe<true, true>(buckets_, hash_array_, num_buckets_, ht_ctx, hash, found, &bd);
   DuplicateNode* duplicates = NULL;
   if (stores_duplicates() && LIKELY(bucket_idx != Iterator::BUCKET_NOT_FOUND)) {
     duplicates = bd.duplicates;
@@ -193,8 +193,7 @@ inline HashTable::Iterator HashTable::FirstUnmatched(HashTableCtx* ctx) {
   // matched, then return. Otherwise, move to the first unmatched entry (node or bucket).
   Bucket* bucket = &buckets_[bucket_idx];
   bool has_duplicates = stores_duplicates() && bucket->HasDuplicates();
-  if ((!has_duplicates && bucket->IsMatched())
-      || (has_duplicates && node->IsMatched())) {
+  if ((!has_duplicates && bucket->IsMatched()) || (has_duplicates && node->IsMatched())) {
     it.NextUnmatched();
   }
   return it;
@@ -219,9 +218,7 @@ inline void HashTable::PrepareBucketForInsert(int64_t bucket_idx, uint32_t hash)
   Bucket* bucket = &buckets_[bucket_idx];
   DCHECK(!bucket->IsFilled());
   ++num_filled_buckets_;
-  bucket->SetFilled();
-  bucket->UnsetMatched();
-  bucket->UnsetHasDuplicates();
+  bucket->PrepareBucketForInsert();
   hash_array_[bucket_idx] = hash;
 }
 
@@ -249,24 +246,22 @@ inline HashTable::DuplicateNode* HashTable::InsertDuplicateNode(
   if (!has_duplicates) {
     // This is the first duplicate in this bucket. It means that we need to convert
     // the current entry in the bucket to a node and link it from the bucket.
-    next_node_->htdata.flat_row = bucket_data.htdata.flat_row;
+    next_node_->htdata.flat_row = bucket_data->htdata.flat_row;
     DCHECK(!bucket->IsMatched());
-    next_node_->UnsetMatched();
-    next_node_->SetNext(nullptr);
+    next_node_->SetNextUnMatched(nullptr);
     AppendNextNode(bucket);
     bucket->SetHasDuplicates();
     ++num_buckets_with_duplicates_;
   }
-  // Link a new node.
-  next_node_->SetNext(bucket->bucket_data().duplicates);
-  next_node_->UnsetMatched();
+  // Link a new node and UnsetMatched
+  next_node_->SetNextUnMatched(bucket->bucket_data().duplicates);
   return AppendNextNode(bucket);
 }
 
 inline TupleRow* IR_ALWAYS_INLINE HashTable::GetRow(HtData& htdata, TupleRow* row) const {
   if (stores_tuples()) {
     row->SetTuple(0, htdata.tuple);
-    //return reinterpret_cast<TupleRow*>(&htdata.tuple);
+    // return reinterpret_cast<TupleRow*>(&htdata.tuple);
     return row;
   } else {
     // TODO: GetTupleRow() has interpreted code that iterates over the row's descriptor.
@@ -275,8 +270,8 @@ inline TupleRow* IR_ALWAYS_INLINE HashTable::GetRow(HtData& htdata, TupleRow* ro
   }
 }
 
-inline TupleRow* IR_ALWAYS_INLINE HashTable::GetRow(Bucket* bucket, TupleRow* row,
-  BucketData* bucket_data) const {
+inline TupleRow* IR_ALWAYS_INLINE HashTable::GetRow(
+    Bucket* bucket, TupleRow* row, BucketData* bucket_data) const {
   DCHECK(bucket != NULL);
   *bucket_data = bucket->bucket_data();
   if (UNLIKELY(stores_duplicates() && bucket->HasDuplicates())) {
@@ -386,9 +381,11 @@ inline void HashTable::Iterator::NextUnmatched() {
   Bucket* bucket = &table_->buckets_[bucket_idx_];
   // Check if there is any remaining unmatched duplicate node in the current bucket.
   if (table_->stores_duplicates() && bucket->HasDuplicates()) {
-    while (node_->Next() != NULL) {
-      node_ = node_->Next();
+    auto next_node = node_->Next();
+    while (next_node != NULL) {
+      node_ = next_node;
       if (!node_->IsMatched()) return;
+      next_node = next_node->Next();
     }
   }
   // Move to the next filled bucket and return if this bucket is not matched or
@@ -399,8 +396,10 @@ inline void HashTable::Iterator::NextUnmatched() {
     if (!table_->stores_duplicates() || !bucket->HasDuplicates()) {
       if (!bucket->IsMatched()) return;
     } else {
-      while (node_->IsMatched() && node_->Next() != NULL) {
-        node_ = node_->Next();
+      auto next_node = node_->Next();
+      while (node_->IsMatched() && next_node != NULL) {
+        node_ = next_node;
+        next_node = next_node->Next();
       }
       if (!node_->IsMatched()) return;
     }
@@ -415,8 +414,8 @@ inline void HashTableCtx::set_level(int level) {
 }
 
 inline int64_t HashTable::CurrentMemSize() const {
-  return num_buckets_ * (sizeof(Bucket) + sizeof(uint32_t)) +
-    num_duplicate_nodes_ * sizeof(DuplicateNode);
+  return num_buckets_ * (sizeof(Bucket) + sizeof(uint32_t))
+      + num_duplicate_nodes_ * sizeof(DuplicateNode);
 }
 
 inline int64_t HashTable::NumInsertsBeforeResize() const {

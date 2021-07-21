@@ -58,9 +58,9 @@ union TestBucketData {
 
 class TaggedBucketData: public TaggedPtr<TestBucketData> {
  public:
-  bool IsData() { return IsTagBitSet(0); }
-  void SetIsData() { SetTagBit(0); }
-  void UnSetIsData() { UnSetTagBit(0); }
+  bool IsData() { return IsTagBitSet0(); }
+  void SetIsData() { SetTagBit0(); }
+  void UnSetIsData() { UnSetTagBit0(); }
   TestBucketData* GetData() {
     return GetPtr();
   }
@@ -89,25 +89,17 @@ TEST(TaggedPtrTest, Simple) {
   EXPECT_EQ(ptr.GetTag(), 0);
 
   // Set Tag and check
-  ptr.SetTagBit(0);
-  ptr.SetTagBit(1);
-  EXPECT_TRUE(ptr.IsTagBitSet(0));
-  EXPECT_TRUE(ptr.IsTagBitSet(1));
-  EXPECT_FALSE(ptr.IsTagBitSet(2));
+  ptr.SetTagBit0();
+  ptr.SetTagBit1();
+  EXPECT_TRUE(ptr.IsTagBitSet0());
+  EXPECT_TRUE(ptr.IsTagBitSet1());
+  EXPECT_FALSE(ptr.IsTagBitSet2());
   EXPECT_EQ(ptr.GetTag(), 96);
 
-  // Set invalid tag
-  EXPECT_THROW(ptr.SetTagBit(7), std::invalid_argument);
-  EXPECT_THROW(ptr.SetTagBit(-1), std::invalid_argument);
-
   // Unset Tag
-  ptr.UnSetTagBit(0);
-  EXPECT_FALSE(ptr.IsTagBitSet(0));
+  ptr.UnSetTagBit0();
+  EXPECT_FALSE(ptr.IsTagBitSet0());
   EXPECT_EQ(ptr.GetTag(), 32);
-
-  // Unset invalid bit
-  EXPECT_THROW(ptr.UnSetTagBit(7), std::invalid_argument);
-  EXPECT_THROW(ptr.UnSetTagBit(-1), std::invalid_argument);
 
   // Move Semantics
   auto ptr_move1 = std::move(ptr);
@@ -123,10 +115,10 @@ TEST(TaggedPtrTest, Comparision) {
   auto ptr1 = MakeTaggedPtr(3, "test1");
   auto ptr2 = MakeTaggedPtr(3, "test2");
   auto ptr3 = MakeTaggedPtr(3, "test1");
-  ptr1.SetTagBit(1);
-  ptr1.SetTagBit(2);
-  ptr3.SetTagBit(1);
-  ptr3.SetTagBit(2);
+  ptr1.SetTagBit1();
+  ptr1.SetTagBit2();
+  ptr3.SetTagBit1();
+  ptr3.SetTagBit2();
   EXPECT_FALSE(ptr1 == ptr3);
   EXPECT_TRUE(ptr1 != ptr2);
   EXPECT_TRUE(*ptr1 == *ptr3);
@@ -136,18 +128,18 @@ TEST(TaggedPtrTest, Complex) {
   // Check if tag bits are retained on setting Data
   TestBucket tagTest;
   tagTest.bucketData.SetIsData();
-  tagTest.bucketData.SetTagBit(1);
+  tagTest.bucketData.SetTagBit1();
   TestBucketData tag_bucket_data;
   tag_bucket_data.data.s = "TagTest";
   tagTest.bucketData.SetBucketData((uintptr_t) &tag_bucket_data);
   EXPECT_TRUE(tagTest.bucketData.IsData());
-  EXPECT_TRUE(tagTest.bucketData.IsTagBitSet(1));
+  EXPECT_TRUE(tagTest.bucketData.IsTagBitSet1());
   EXPECT_EQ(tagTest.bucketData.GetData()->data.s, "TagTest");
   // set to null and check
   tagTest.bucketData.SetBucketData(0);
   EXPECT_TRUE(tagTest.bucketData.IsNull());
   EXPECT_TRUE(tagTest.bucketData.IsData());
-  EXPECT_TRUE(tagTest.bucketData.IsTagBitSet(1));
+  EXPECT_TRUE(tagTest.bucketData.IsTagBitSet1());
 
   // Creating two buckets bucket1 and bucket2 and linking bucket 2 to bucket1.
   TestBucket bucket1;
