@@ -78,7 +78,6 @@ inline int64_t HashTable::Probe(Bucket* buckets, uint32_t* hash_array,
     }
     // Move to the next bucket.
     ++step;
-    ++ht_ctx->travel_length_;
     if (quadratic_probing()) {
       // The i-th probe location is idx = (hash + (step * (step + 1)) / 2) mod
       // num_buckets. This gives num_buckets unique idxs (between 0 and N-1) when
@@ -89,6 +88,8 @@ inline int64_t HashTable::Probe(Bucket* buckets, uint32_t* hash_array,
       bucket_idx = (bucket_idx + 1) & (num_buckets - 1);
     }
   } while (LIKELY(step < num_buckets));
+
+  ht_ctx->travel_length_ += step;
 
   DCHECK_EQ(num_filled_buckets_, num_buckets)
       << "Probing of a non-full table "
@@ -165,14 +166,18 @@ inline HashTable::Iterator HashTable::FindProbeRow(HashTableCtx* __restrict__ ht
 
 
 // TODO: support lazy evaluation like HashTable::Insert().
+template<const bool GET_TUPLE = false>
 inline HashTable::Iterator HashTable::FindBuildRowBucket(
-    HashTableCtx* __restrict__ ht_ctx, bool* found, BucketData* bd) {
+    HashTableCtx* __restrict__ ht_ctx, bool* found, Tuple* row) {
   uint32_t hash = ht_ctx->expr_values_cache()->CurExprValuesHash();
   int64_t bucket_idx =
       Probe<true, true>(buckets_, hash_array_, num_buckets_, ht_ctx, hash, found, &bd);
   DuplicateNode* duplicates = NULL;
   if (stores_duplicates() && LIKELY(bucket_idx != Iterator::BUCKET_NOT_FOUND)) {
     duplicates = bd.duplicates;
+  }
+  if (GET_TUPLE) {
+    row = reinterpret_cast<Tuple*>(bd);
   }
   return Iterator(this, ht_ctx->scratch_row(), bucket_idx, duplicates);
 }
