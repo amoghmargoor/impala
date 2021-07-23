@@ -110,7 +110,8 @@ Status GroupingAggregator::ProcessRow(
   bool found;
   // Find the appropriate bucket in the hash table. There will always be a free
   // bucket because we checked the size above.
-  HashTable::Iterator it = hash_tbl->FindBuildRowBucket(ht_ctx, &found);
+  Tuple* tuple;
+  HashTable::Iterator it = hash_tbl->FindBuildRowBucketAndTuple(ht_ctx, &found, tuple);
   DCHECK(!it.AtEnd()) << "Hash table had no free buckets";
   if (AGGREGATED_ROWS) {
     // If the row is already an aggregate row, it cannot match anything in the
@@ -119,7 +120,7 @@ Status GroupingAggregator::ProcessRow(
     DCHECK(!found);
   } else if (found) {
     // Row is already in hash table. Do the aggregation and we're done.
-    UpdateTuple(dst_partition->agg_fn_evals.data(), it.GetTuple(), row);
+    UpdateTuple(dst_partition->agg_fn_evals.data(), bd.htdata.tuple, row);
     return Status::OK();
   }
 
@@ -232,23 +233,24 @@ bool GroupingAggregator::TryAddToHashTable(HashTableCtx* __restrict__ ht_ctx,
   DCHECK_EQ(hash_tbl, partition->hash_tbl.get());
   DCHECK_GE(*remaining_capacity, 0);
   bool found;
-  // This is called from ProcessBatchStreaming() so the rows are not aggregated.
-  HashTable::Iterator it = hash_tbl->FindBuildRowBucket(ht_ctx, &found);
   Tuple* intermediate_tuple;
-  if (found) {
-    intermediate_tuple = it.GetTuple();
-  } else if (*remaining_capacity == 0) {
-    return false;
-  } else {
-    intermediate_tuple = ConstructIntermediateTuple(
-        partition->agg_fn_evals, partition->aggregated_row_stream.get(), status);
-    if (LIKELY(intermediate_tuple != nullptr)) {
-      it.SetTuple(intermediate_tuple, hash);
-      --(*remaining_capacity);
-    } else {
-      // Avoid repeatedly trying to add tuples when under memory pressure.
-      *remaining_capacity = 0;
+  // This is called from ProcessBatchStreaming() so the rows are not aggregated.
+  HashTable::Iterator it = hash_tbl->FindBuildRowBucketAndTuple(ht_ctx, &found, intermediate_tuple);
+  
+  if (!found) {
+    if (*remaining_capacity == 0) {
       return false;
+    } else {
+      intermediate_tuple = ConstructIntermediateTuple(
+        partition->agg_fn_evals, partition->aggregated_row_stream.get(), status);
+      if (LIKELY(intermediate_tuple != nullptr)) {
+        it.SetTuple(intermediate_tuple, hash);
+        --(*remaining_capacity);
+      } else {
+        // Avoid repeatedly trying to add tuples when under memory pressure.
+        *remaining_capacity = 0;
+        return false;
+      }
     }
   }
 

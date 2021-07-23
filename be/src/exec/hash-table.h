@@ -857,6 +857,8 @@ class HashTable {
   /// Thread-safe for read-only hash tables.
   Iterator IR_ALWAYS_INLINE FindBuildRowBucket(
       HashTableCtx* __restrict__ ht_ctx, bool* found);
+  Iterator IR_ALWAYS_INLINE FindBuildRowBucketAndTuple(
+      HashTableCtx* __restrict__ ht_ctx, bool* found, Tuple* tuple);
 
   /// Find slot for 'hash' from 0 to 'num_buckets'.
   int64_t getBucketId(uint32_t hash, int64_t num_buckets);
