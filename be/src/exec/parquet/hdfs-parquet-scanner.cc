@@ -2101,25 +2101,6 @@ Status HdfsParquetScanner::AssembleRows(
   DCHECK(scratch_batch_ != nullptr);
 
   int64_t num_rows_read = 0;
-  ScalarExprEvaluator* const* conjunct_evals = conjunct_evals_->data();
-  vector<SlotId> slot_ids;
-  unordered_set<SlotId> filter_slot_ids;
-  vector<> column_readers_early;
-  vector<> column_readers_late;
-  for (int i = 0; i < conjunct_evals_->size(); i++) {
-    slot_ids.clear();
-    int num_slots = conjunct_evals_[i]->GetSlotIds(slot_ids);
-    filter_slot_ids.insert(slot_ids.begin(), slot_ids.end());
-  }
-  for (int c = 0; c < column_readers.size(); ++c) {
-    SlotDescriptor* slot_desc = column_readers[c]->slot_desc();
-    if (slot_desc && filter_slot_ids.find(slot_desc->id()) == filter_slot_ids.end()) {
-      column_readers_late.push_back(column_readers[c]);
-    } else {
-      column_readers_early.push(columns_readers[c]);
-    }
-  }
-
   while (!column_readers[0]->RowGroupAtEnd()) {
     // Start a new scratch batch.
     RETURN_IF_ERROR(scratch_batch_->Reset(state_));
