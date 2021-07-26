@@ -115,6 +115,7 @@ bool CollectionColumnReader::ReadNonRepeatedValueBatch(MemPool* pool,
 bool CollectionColumnReader::ReadSlot(CollectionValue* slot, MemPool* pool) {
   DCHECK(!children_.empty());
   DCHECK_LE(rep_level_, new_collection_rep_level());
+  SCOPED_TIMER(parent_->decoding_timer_);
 
   // Recursively read the collection into a new CollectionValue.
   *slot = CollectionValue();

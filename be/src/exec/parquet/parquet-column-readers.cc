@@ -667,6 +667,7 @@ template <typename InternalType, parquet::Type::type PARQUET_TYPE, bool MATERIAL
 template <Encoding::type ENCODING, bool NEEDS_CONVERSION>
 bool ScalarColumnReader<InternalType, PARQUET_TYPE, MATERIALIZED>::ReadSlot(
     Tuple* RESTRICT tuple) RESTRICT {
+  SCOPED_TIMER(parent_->decoding_timer_);
   void* slot = tuple->GetSlot(tuple_offset_);
   // Use an uninitialized stack allocation for temporary value to avoid running
   // constructors doing work unnecessarily, e.g. if T == StringValue.

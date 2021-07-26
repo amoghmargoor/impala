@@ -320,6 +320,9 @@ class HdfsScanner {
   /// Time spent decompressing bytes.
   RuntimeProfile::Counter* decompress_timer_ = nullptr;
 
+  /// Time spent decoding bytes.
+  RuntimeProfile::Counter* decoding_timer_ = nullptr;
+
   /// Matching typedef for WriteAlignedTuples for codegen. Refer to comments for that
   /// function.
   typedef int (*WriteTuplesFn)(HdfsScanner*, MemPool*, TupleRow*, FieldLocation*,

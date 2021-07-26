@@ -120,6 +120,7 @@ Status HdfsScanner::Open(ScannerContext* context) {
   template_tuple_map_[scan_node_->tuple_desc()] = template_tuple_;
 
   decompress_timer_ = ADD_TIMER(scan_node_->runtime_profile(), "DecompressionTime");
+  decoding_timer_ = ADD_TIMER(scan_node_->runtime_profile(), "DecodingTimer");
   return Status::OK();
 }
 
