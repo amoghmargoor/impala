@@ -166,9 +166,9 @@ inline HashTable::Iterator HashTable::FindProbeRow(HashTableCtx* __restrict__ ht
 
 
 // TODO: support lazy evaluation like HashTable::Insert().
-template<const bool GET_TUPLE = false>
+template<const bool GET_TUPLE>
 inline HashTable::Iterator HashTable::FindBuildRowBucket(
-    HashTableCtx* __restrict__ ht_ctx, bool* found, Tuple* row) {
+    HashTableCtx* __restrict__ ht_ctx, bool* found, Tuple** row) {
   uint32_t hash = ht_ctx->expr_values_cache()->CurExprValuesHash();
   BucketData bd;
   int64_t bucket_idx =
@@ -178,7 +178,7 @@ inline HashTable::Iterator HashTable::FindBuildRowBucket(
     duplicates = bd.duplicates;
   }
   if (GET_TUPLE) {
-    row = reinterpret_cast<Tuple*>(bd);
+    *row = bd.htdata.tuple;
   }
   return Iterator(this, ht_ctx->scratch_row(), bucket_idx, duplicates);
 }
