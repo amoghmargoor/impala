@@ -136,7 +136,7 @@ class ScanNode : public ExecNode {
   }
 
   RuntimeProfile::Counter* decode_tuple_timer() const {
-    return materialize_tuple_timer_;
+    return decode_tuple_timer_;
   }
 
   static const std::string SCANNER_THREAD_COUNTERS_PREFIX;
@@ -174,6 +174,9 @@ class ScanNode : public ExecNode {
 
   /// Total time writing tuple slots. Used for all types of scans.
   RuntimeProfile::Counter* materialize_tuple_timer_ = nullptr;
+
+  /// Total time decoding and writing tuple slots. Used for oparquet only currently.
+  RuntimeProfile::Counter* decode_tuple_timer_ = nullptr;
 
   /// Total number of scan ranges completed. Initialised in subclasses that have a
   /// concept of "scan range", including HDFS and Kudu.

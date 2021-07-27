@@ -239,9 +239,6 @@ class HdfsOrcScanner : public HdfsColumnarScanner {
   /// Timer for materializing rows. This ignores time getting the next buffer.
   ScopedTimer<MonotonicStopWatch> assemble_rows_timer_;
 
-  /// Timer for materializing rows. This ignores time getting the next buffer.
-  ScopedTimer<MonotonicStopWatch> assemble_decode_timer_;
-
   /// Average and min/max time spent processing the footer by each split.
   RuntimeProfile::SummaryStatsCounter* process_footer_timer_stats_ = nullptr;
 

@@ -668,6 +668,7 @@ template <Encoding::type ENCODING, bool NEEDS_CONVERSION>
 bool ScalarColumnReader<InternalType, PARQUET_TYPE, MATERIALIZED>::ReadSlot(
     Tuple* RESTRICT tuple) RESTRICT {
   SCOPED_TIMER(parent_->decoding_timer_);
+  parent->assemble_decode_timer_.start();
   void* slot = tuple->GetSlot(tuple_offset_);
   // Use an uninitialized stack allocation for temporary value to avoid running
   // constructors doing work unnecessarily, e.g. if T == StringValue.
@@ -681,20 +682,29 @@ bool ScalarColumnReader<InternalType, PARQUET_TYPE, MATERIALIZED>::ReadSlot(
     // The value is invalid but execution should continue - set the null indicator and
     // skip conversion.
     tuple->SetNull(null_indicator_offset_);
+    parent->assemble_decode_timer_.stop();
     return true;
   }
-  if (NEEDS_CONVERSION && UNLIKELY(!ConvertSlot(val_ptr, slot))) return false;
+  if (NEEDS_CONVERSION && UNLIKELY(!ConvertSlot(val_ptr, slot))) {
+    parent->assemble_decode_timer_.stop();
+    return false;
+  }
+  parent->assemble_decode_timer_.stop();
   return true;
 }
 
 template <typename InternalType, parquet::Type::type PARQUET_TYPE, bool MATERIALIZED>
 bool ScalarColumnReader<InternalType, PARQUET_TYPE, MATERIALIZED>::ReadSlots(
     int64_t num_to_read, int tuple_size, uint8_t* RESTRICT tuple_mem) RESTRICT {
+  parent->assemble_decode_timer_.start();
+  bool ret;
   if (NeedsConversionInline()) {
-    return ReadAndConvertSlots(num_to_read, tuple_size, tuple_mem);
+    ret = ReadAndConvertSlots(num_to_read, tuple_size, tuple_mem);
   } else {
-    return ReadSlotsNoConversion(num_to_read, tuple_size, tuple_mem);
+    ret = ReadSlotsNoConversion(num_to_read, tuple_size, tuple_mem);
   }
+  parent->assemble_decode_timer_.stop();
+  return ret;
 }
 
 template <typename InternalType, parquet::Type::type PARQUET_TYPE, bool MATERIALIZED>
