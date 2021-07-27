@@ -97,6 +97,7 @@ HdfsParquetScanner::HdfsParquetScanner(HdfsScanNodeBase* scan_node, RuntimeState
     dictionary_pool_(new MemPool(scan_node->mem_tracker())),
     stats_batch_read_pool_(new MemPool(scan_node->mem_tracker())),
     assemble_rows_timer_(scan_node_->materialize_tuple_timer()),
+    assemble_decode_timer_(scan_node_->decode_tuple_timer()),
     process_footer_timer_stats_(nullptr),
     num_cols_counter_(nullptr),
     num_stats_filtered_row_groups_counter_(nullptr),

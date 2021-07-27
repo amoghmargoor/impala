@@ -135,6 +135,10 @@ class ScanNode : public ExecNode {
     return materialize_tuple_timer_;
   }
 
+  RuntimeProfile::Counter* decode_tuple_timer() const {
+    return materialize_tuple_timer_;
+  }
+
   static const std::string SCANNER_THREAD_COUNTERS_PREFIX;
 
   const std::vector<ScalarExpr*>& filter_exprs() const { return filter_exprs_; }
