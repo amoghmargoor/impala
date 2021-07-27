@@ -171,7 +171,7 @@ Status ScanNode::Prepare(RuntimeState* state) {
 
   rows_read_counter_ = PROFILE_RowsRead.Instantiate(runtime_profile());
   materialize_tuple_timer_ = PROFILE_MaterializeTupleTime.Instantiate(runtime_profile());
-  decode_tuple_timer_ = PROFILE_DecodeTupleTimer.Instantiate(runtime_profile());
+  decode_tuple_timer_ = PROFILE_DecodeTupleTime.Instantiate(runtime_profile());
 
   DCHECK_EQ(filter_exprs_.size(), filter_ctxs_.size());
   for (int i = 0; i < filter_exprs_.size(); ++i) {
