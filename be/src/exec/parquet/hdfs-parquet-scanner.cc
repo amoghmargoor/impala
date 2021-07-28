@@ -113,6 +113,7 @@ HdfsParquetScanner::HdfsParquetScanner(HdfsScanNodeBase* scan_node, RuntimeState
     coll_items_read_counter_(0),
     page_index_(this) {
   assemble_rows_timer_.Stop();
+  assemble_decode_timer_.Stop();
 }
 
 Status HdfsParquetScanner::Open(ScannerContext* context) {
@@ -284,6 +285,8 @@ void HdfsParquetScanner::Close(RowBatch* row_batch) {
   }
   assemble_rows_timer_.Stop();
   assemble_rows_timer_.ReleaseCounter();
+  assemble_decode_timer_.Stop();
+  assemble_decode_timer_.ReleaseCounter();
 
   // If this was a metadata only read (i.e. count(*)), there are no columns.
   if (compression_types.empty()) {

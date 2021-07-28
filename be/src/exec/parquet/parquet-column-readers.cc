@@ -668,17 +668,22 @@ template <Encoding::type ENCODING, bool NEEDS_CONVERSION>
 bool ScalarColumnReader<InternalType, PARQUET_TYPE, MATERIALIZED>::ReadSlot(
     Tuple* RESTRICT tuple) RESTRICT {
   SCOPED_TIMER(parent_->decoding_timer_);
-  parent_->assemble_decode_timer_.Start();
   void* slot = tuple->GetSlot(tuple_offset_);
   // Use an uninitialized stack allocation for temporary value to avoid running
   // constructors doing work unnecessarily, e.g. if T == StringValue.
   alignas(InternalType) uint8_t val_buf[sizeof(InternalType)];
   InternalType* val_ptr =
       reinterpret_cast<InternalType*>(NEEDS_CONVERSION ? val_buf : slot);
-
-  if (UNLIKELY(!DecodeValue<ENCODING>(&data_, data_end_, val_ptr))) return false;
+   parent_->assemble_decode_timer_.Start();
+  if (UNLIKELY(!DecodeValue<ENCODING>(&data_, data_end_, val_ptr))) {
+    parent_->assemble_decode_timer_.Stop();
+    return false;
+  }
   if (UNLIKELY(NeedsValidationInline() && !ValidateValue(val_ptr))) {
-    if (UNLIKELY(!parent_->parse_status_.ok())) return false;
+    if (UNLIKELY(!parent_->parse_status_.ok())) {
+      parent_->assemble_decode_timer_.Stop();
+      return false;
+    }
     // The value is invalid but execution should continue - set the null indicator and
     // skip conversion.
     tuple->SetNull(null_indicator_offset_);
