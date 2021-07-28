@@ -115,14 +115,15 @@ bool CollectionColumnReader::ReadNonRepeatedValueBatch(MemPool* pool,
 bool CollectionColumnReader::ReadSlot(CollectionValue* slot, MemPool* pool) {
   DCHECK(!children_.empty());
   DCHECK_LE(rep_level_, new_collection_rep_level());
-  SCOPED_TIMER(parent_->decoding_timer_);
 
+  parent_->assemble_decode_timer_.Start();
   // Recursively read the collection into a new CollectionValue.
   *slot = CollectionValue();
   CollectionValueBuilder builder(
       slot, *slot_desc_->collection_item_descriptor(), pool, parent_->state_);
   bool continue_execution =
       parent_->AssembleCollection(children_, new_collection_rep_level(), &builder);
+  parent_->assemble_decode_timer_.Stop();
   if (!continue_execution) return false;
 
   // AssembleCollection() advances child readers, so we don't need to call NextLevels()

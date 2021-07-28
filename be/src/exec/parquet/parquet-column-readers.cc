@@ -667,14 +667,13 @@ template <typename InternalType, parquet::Type::type PARQUET_TYPE, bool MATERIAL
 template <Encoding::type ENCODING, bool NEEDS_CONVERSION>
 bool ScalarColumnReader<InternalType, PARQUET_TYPE, MATERIALIZED>::ReadSlot(
     Tuple* RESTRICT tuple) RESTRICT {
-  SCOPED_TIMER(parent_->decoding_timer_);
   void* slot = tuple->GetSlot(tuple_offset_);
   // Use an uninitialized stack allocation for temporary value to avoid running
   // constructors doing work unnecessarily, e.g. if T == StringValue.
   alignas(InternalType) uint8_t val_buf[sizeof(InternalType)];
   InternalType* val_ptr =
       reinterpret_cast<InternalType*>(NEEDS_CONVERSION ? val_buf : slot);
-   parent_->assemble_decode_timer_.Start();
+  parent_->assemble_decode_timer_.Start();
   if (UNLIKELY(!DecodeValue<ENCODING>(&data_, data_end_, val_ptr))) {
     parent_->assemble_decode_timer_.Stop();
     return false;
