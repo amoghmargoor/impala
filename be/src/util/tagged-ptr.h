@@ -80,7 +80,7 @@ template<class T, bool OWNS=true> class TaggedPtr {
 
   // Define move constructor and move assignment
   TaggedPtr(TaggedPtr&& other) : data_(std::exchange(other.data_, 0)) {}
-  TaggedPtr &operator=(TaggedPtr &&other) noexcept {
+  TaggedPtr<T, OWNS> &operator=(TaggedPtr<T, OWNS> &&other) noexcept {
     if (this != &other) {
       data_ = std::exchange(other.data_, 0);
     }
