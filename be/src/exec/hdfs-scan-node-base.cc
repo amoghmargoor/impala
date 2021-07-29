@@ -120,6 +120,10 @@ PROFILE_DEFINE_COUNTER(CachedFileHandlesMissCount, STABLE_LOW, TUnit::UNIT,
 PROFILE_DEFINE_HIGH_WATER_MARK_COUNTER(MaxCompressedTextFileLength, STABLE_LOW,
     TUnit::BYTES, "The size of the largest compressed text file to be scanned. "
     "This is used to estimate scanner thread memory usage.");
+PROFILE_DEFINE_COUNTER(RowsBatchedRead, UNSTABLE, TUnit::UNIT,
+    "Total number of rows read in batch");
+PROFILE_DEFINE_COUNTER(RowsNonBatchedRead, UNSTABLE, TUnit::UNIT,
+    "Total number of rows not read in batch");
 PROFILE_DEFINE_TIMER(ScannerIoWaitTime, STABLE_LOW, "Total amount of time scanner "
     "threads spent waiting for I/O. This value can be compared to the value of "
     "ScannerThreadsTotalWallClockTime of MT_DOP = 0 scan nodes or otherwise compared "
@@ -594,6 +598,8 @@ Status HdfsScanNodeBase::Open(RuntimeState* state) {
       PROFILE_MaxCompressedTextFileLength.Instantiate(runtime_profile());
 
   scanner_io_wait_time_ = PROFILE_ScannerIoWaitTime.Instantiate(runtime_profile());
+  rows_batched_read_ = PROFILE_RowsBatchedRead.Instantiate(runtime_profile());
+  rows_non_batched_read_ = PROFILE_RowsNonBatchedRead.Instantiate(runtime_profile());
   hdfs_read_thread_concurrency_bucket_ = runtime_profile()->AddBucketingCounters(
       &active_hdfs_read_thread_counter_,
       ExecEnv::GetInstance()->disk_io_mgr()->num_total_disks() + 1);

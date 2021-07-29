@@ -420,6 +420,7 @@ bool ScalarColumnReader<InternalType, PARQUET_TYPE, MATERIALIZED>::ReadValueBatc
   }
 
   int val_count = 0;
+  int batch_val_count = 0;
   bool continue_execution = true;
   while (val_count < max_values && !RowGroupAtEnd() && continue_execution) {
     DCHECK_GE(num_buffered_values_, 0);
@@ -463,6 +464,7 @@ bool ScalarColumnReader<InternalType, PARQUET_TYPE, MATERIALIZED>::ReadValueBatc
       continue_execution = MaterializeValueBatchRepeatedDefLevel(
           remaining_val_capacity, tuple_size, next_tuple, &ret_val_count);
       val_count += ret_val_count;
+      batch_val_count += ret_val_count;
     } else {
       // We don't have a repeated run - cache def levels and process value-by-value.
       if (!def_levels_.CacheHasNext()) {
@@ -497,6 +499,8 @@ bool ScalarColumnReader<InternalType, PARQUET_TYPE, MATERIALIZED>::ReadValueBatc
     }
   }
   *num_values = val_count;
+  parent_->rows_non_batched_read_.Add(val_count - batch_val_count);
+  parent_->rows_batched_read_.Add(batch_val_count);
   return continue_execution;
 }
 

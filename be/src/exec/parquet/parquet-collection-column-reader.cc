@@ -88,6 +88,7 @@ bool CollectionColumnReader::ReadValueBatch(MemPool* pool, int max_values,
     }
   }
   *num_values = val_count;
+  parent_->rows_non_batched_read_.Add(val_count);
   return continue_execution;
 }
 
@@ -109,6 +110,7 @@ bool CollectionColumnReader::ReadNonRepeatedValueBatch(MemPool* pool,
     }
   }
   *num_values = val_count;
+  parent_->rows_non_batched_read_.Add(val_count);
   return continue_execution;
 }
 

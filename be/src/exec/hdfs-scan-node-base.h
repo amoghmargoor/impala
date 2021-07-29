@@ -728,6 +728,8 @@ class HdfsScanNodeBase : public ScanNode {
   RuntimeProfile::Counter* data_cache_hit_bytes_ = nullptr;
   RuntimeProfile::Counter* data_cache_miss_bytes_ = nullptr;
   RuntimeProfile::Counter* scanner_io_wait_time_ = nullptr;
+  RuntimeProfile::Counter* rows_non_batched_read_ = nullptr;
+  RuntimeProfile::Counter* rows_batched_read_ = nullptr;
   RuntimeProfile::Counter* average_hdfs_read_thread_concurrency_ = nullptr;
   RuntimeProfile::Counter* per_read_thread_throughput_counter_ = nullptr;
   RuntimeProfile::Counter* num_disks_accessed_counter_ = nullptr;
