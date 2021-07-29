@@ -499,8 +499,8 @@ bool ScalarColumnReader<InternalType, PARQUET_TYPE, MATERIALIZED>::ReadValueBatc
     }
   }
   *num_values = val_count;
-  parent_->rows_non_batched_read_.Add(val_count - batch_val_count);
-  parent_->rows_batched_read_.Add(batch_val_count);
+  parent_->rows_non_batched_read_->Add(val_count - batch_val_count);
+  parent_->rows_batched_read_->Add(batch_val_count);
   return continue_execution;
 }
 
