@@ -224,7 +224,8 @@ inline void HashTable::PrepareBucketForInsert(int64_t bucket_idx, uint32_t hash)
 
 inline void HashTable::InsertNewBucketTupleData(int64_t bucket_idx, uint32_t hash,
   Tuple* data) {
-  InsertOrPrepareNewBucketData<true>(bucket_idx, hash, reinterpret_cast<uintptr_t> data);
+  InsertOrPrepareNewBucketData<true>(bucket_idx, hash,
+    reinterpret_cast<uintptr_t>(data));
 }
 
 template<const bool INSERT>

@@ -1133,15 +1133,15 @@ class HashTable {
 
   /// Resets the contents of the empty bucket with index 'bucket_idx' and also
   /// sets tuple as bucket data.
-  void ALWAYS_INLINE HashTable::InsertNewBucketTupleData(int64_t bucket_idx,
-    uint32_t hash, Tuple* data)
+  void ALWAYS_INLINE InsertNewBucketTupleData(int64_t bucket_idx, uint32_t hash,
+    Tuple* data);
 
   /// Can either prepare the bucket indexed by bucket_idx or do an additional step
   /// of inserting data if template paramenter 'INSERT' is true. Used as utility
   /// function for 'PrepareBucketForInsert' and 'InsertNewBucketTupleData'.
   template<const bool INSERT>
-  void ALWAYS_INLINE HashTable::InsertOrPrepareNewBucketData(int64_t bucket_idx,
-    uint32_t hash, uintptr_t data = 0);
+  void ALWAYS_INLINE InsertOrPrepareNewBucketData(int64_t bucket_idx, uint32_t hash,
+    uintptr_t data = 0);
 
   /// Return the TupleRow pointed by 'htdata'.
   TupleRow* GetRow(HtData& htdata, TupleRow* row) const;
