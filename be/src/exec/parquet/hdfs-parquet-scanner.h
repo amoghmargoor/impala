@@ -531,6 +531,9 @@ class HdfsParquetScanner : public HdfsColumnarScanner {
   /// Number of row groups skipped due to dictionary filter
   RuntimeProfile::Counter* num_dict_filtered_row_groups_counter_;
 
+  RuntimeProfile::Counter* rows_non_batched_read_;
+  RuntimeProfile::Counter* rows_batched_read_;
+
   /// Tracks the size of any compressed pages read. If no compressed pages are read, this
   /// counter is empty
   RuntimeProfile::SummaryStatsCounter* parquet_compressed_page_size_counter_;

@@ -98,6 +98,8 @@ HdfsParquetScanner::HdfsParquetScanner(HdfsScanNodeBase* scan_node, RuntimeState
     stats_batch_read_pool_(new MemPool(scan_node->mem_tracker())),
     assemble_rows_timer_(scan_node_->materialize_tuple_timer()),
     assemble_decode_timer_(scan_node_->decode_tuple_timer()),
+    rows_non_batched_read_(scan_node_->rows_non_batched_read()),
+    rows_batched_read_(scan_node_->rows_batched_read()),
     process_footer_timer_stats_(nullptr),
     num_cols_counter_(nullptr),
     num_stats_filtered_row_groups_counter_(nullptr),

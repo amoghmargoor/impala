@@ -453,6 +453,14 @@ class HdfsScanNodeBase : public ScanNode {
     return scanner_io_wait_time_;
   }
 
+  RuntimeProfile::Counter* rows_non_batched_read() const {
+    return rows_non_batched_read_;
+  }
+
+  RuntimeProfile::Counter* rows_batched_read() const {
+    return rows_batched_read_;
+  }
+
   const static int SKIP_COLUMN = -1;
 
   /// Returns index into materialized_slots with 'path'.  Returns SKIP_COLUMN if
