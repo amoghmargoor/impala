@@ -56,7 +56,7 @@ union TestBucketData {
   TestBucket* next;
 };
 
-class TaggedBucketData: public TaggedPtr<TestBucketData> {
+class TaggedBucketData: public TaggedPtr<TestBucketData, false> {
  public:
   bool IsData() { return IsTagBitSet0(); }
   void SetIsData() { SetTagBit0(); }
@@ -68,7 +68,7 @@ class TaggedBucketData: public TaggedPtr<TestBucketData> {
     SetPtr((TestBucketData *) address);
   }
   // In destructor reset the pointer so that base contructor doesn't free it.
-  ~TaggedBucketData() { SetPtr(0); }
+  ~TaggedBucketData() {}
 };
 
 struct TestBucket {

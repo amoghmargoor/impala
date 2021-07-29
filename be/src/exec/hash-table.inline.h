@@ -219,12 +219,27 @@ inline void HashTable::NextFilledBucket(int64_t* bucket_idx, DuplicateNode** nod
 }
 
 inline void HashTable::PrepareBucketForInsert(int64_t bucket_idx, uint32_t hash) {
+  InsertOrPrepareNewBucketData<false>(bucket_idx, hash);
+}
+
+inline void HashTable::InsertNewBucketTupleData(int64_t bucket_idx, uint32_t hash,
+  Tuple* data) {
+  InsertOrPrepareNewBucketData<true>(bucket_idx, hash, reinterpret_cast<uintptr_t> data);
+}
+
+template<const bool INSERT>
+inline void HashTable::InsertOrPrepareNewBucketData(int64_t bucket_idx, uint32_t hash,
+  uintptr_t data) {
   DCHECK_GE(bucket_idx, 0);
   DCHECK_LT(bucket_idx, num_buckets_);
   Bucket* bucket = &buckets_[bucket_idx];
   DCHECK(!bucket->IsFilled());
   ++num_filled_buckets_;
-  bucket->PrepareBucketForInsert();
+  if (INSERT) {
+    bucket->InsertNewBucketData(data);
+  } else {
+    bucket->PrepareBucketForInsert();
+  }
   hash_array_[bucket_idx] = hash;
 }
 
@@ -320,8 +335,7 @@ inline Tuple* IR_ALWAYS_INLINE HashTable::Iterator::GetTuple() const {
 inline void HashTable::Iterator::SetTuple(Tuple* tuple, uint32_t hash) {
   DCHECK(!AtEnd());
   DCHECK(table_->stores_tuples());
-  table_->PrepareBucketForInsert(bucket_idx_, hash);
-  table_->buckets_[bucket_idx_].SetTuple(tuple);
+  table_->InsertNewBucketTupleData(bucket_idx_, hash, tuple);
 }
 
 inline void HashTable::Iterator::SetMatched() {

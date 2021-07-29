@@ -648,7 +648,7 @@ class HashTable {
   };
 
   struct DuplicateNode; // Forward Declaration
-  class TaggedDuplicateNode : public TaggedPtr<DuplicateNode> {
+  class TaggedDuplicateNode : public TaggedPtr<DuplicateNode, false> {
    public:
     ALWAYS_INLINE bool IsMatched() { return IsTagBitSet0(); }
     ALWAYS_INLINE void SetMatched() { SetTagBit0(); }
@@ -659,7 +659,7 @@ class HashTable {
       SetData((uintptr_t) node);
       DCHECK(!IsMatched());
     }
-    ~TaggedDuplicateNode() { SetPtr((DuplicateNode*)0); }
+    ~TaggedDuplicateNode() {}
   };
   /// struct DuplicateNode is referenced by SIZE_OF_DUPLICATENODE of
   /// planner/PlannerContext.java. If struct DuplicateNode is modified, please modify
@@ -699,7 +699,7 @@ class HashTable {
   ///    information but it is efficient. This space is otherwise unused.
   /// 3. bool hasDuplicates: (Tag bit 2) Used in case of duplicates. If true, then
   ///    the bucketData union should be used as 'duplicates'.
-  class TaggedBucketData : public TaggedPtr<uint8> {
+  class TaggedBucketData : public TaggedPtr<uint8, false> {
    public:
     TaggedBucketData() = default;
     ALWAYS_INLINE bool IsFilled() { return IsTagBitSet0(); }
@@ -726,9 +726,13 @@ class HashTable {
       // Sets filled, unsets matched, duplicate and ptr
       SetData(0x8000000000000000);
     }
-
+    ALWAYS_INLINE void InsertNewBucketData(uintptr_t data) {
+      // Sets filled, unsets matched, unsets duplicate along with
+      // setting data.
+      SetData(data | 0x8000000000000000);
+    }
     TaggedBucketData & operator=(const TaggedBucketData & bd) = default;
-    ~TaggedBucketData() { SetPtr((uint8*) 0); }
+    ~TaggedBucketData() {}
   };
 
   /// struct Bucket is referenced by SIZE_OF_BUCKET of planner/PlannerContext.java.
@@ -765,6 +769,9 @@ class HashTable {
     }
     ALWAYS_INLINE void PrepareBucketForInsert() {
       bd.PrepareBucketForInsert();
+    }
+    ALWAYS_INLINE void InsertNewBucketData(uintptr_t data) {
+      bd.InsertNewBucketData(data);
     }
    private:
     // This should not be exposed outside as implementation details
@@ -1123,6 +1130,18 @@ class HashTable {
   /// Resets the contents of the empty bucket with index 'bucket_idx', in preparation for
   /// an insert. Sets all the fields of the bucket other than 'data'.
   void IR_ALWAYS_INLINE PrepareBucketForInsert(int64_t bucket_idx, uint32_t hash);
+
+  /// Resets the contents of the empty bucket with index 'bucket_idx' and also
+  /// sets tuple as bucket data.
+  void ALWAYS_INLINE HashTable::InsertNewBucketTupleData(int64_t bucket_idx,
+    uint32_t hash, Tuple* data)
+
+  /// Can either prepare the bucket indexed by bucket_idx or do an additional step
+  /// of inserting data if template paramenter 'INSERT' is true. Used as utility
+  /// function for 'PrepareBucketForInsert' and 'InsertNewBucketTupleData'.
+  template<const bool INSERT>
+  void ALWAYS_INLINE HashTable::InsertOrPrepareNewBucketData(int64_t bucket_idx,
+    uint32_t hash, uintptr_t data = 0);
 
   /// Return the TupleRow pointed by 'htdata'.
   TupleRow* GetRow(HtData& htdata, TupleRow* row) const;

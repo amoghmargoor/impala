@@ -68,7 +68,7 @@ SET_UNSET_IS_TAG(4)          \
 SET_UNSET_IS_TAG(5)          \
 SET_UNSET_IS_TAG(6)
 
-template<class T> class TaggedPtr {
+template<class T, bool OWNS=true> class TaggedPtr {
  public:
   TaggedPtr() = default;
 
@@ -80,7 +80,7 @@ template<class T> class TaggedPtr {
 
   // Define move constructor and move assignment
   TaggedPtr(TaggedPtr&& other) : data_(std::exchange(other.data_, 0)) {}
-  TaggedPtr<T> &operator=(TaggedPtr<T> &&other) noexcept {
+  TaggedPtr &operator=(TaggedPtr &&other) noexcept {
     if (this != &other) {
       data_ = std::exchange(other.data_, 0);
     }
@@ -88,9 +88,12 @@ template<class T> class TaggedPtr {
   }
 
   ~TaggedPtr() {
-    T* ptr = GetPtr();
-    // will not work for arrays, but arrays are not yet supported.
-    if (ptr) delete ptr;
+    if (OWNS) {
+      // Cleanup if owning the pointer
+      T* ptr = GetPtr();
+      // will not work for arrays, but arrays are not yet supported.
+      if (ptr) delete ptr;
+    }
   }
 
   // Member functions for Setting/Unsetting/Checking tags for 0-6
