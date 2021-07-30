@@ -462,7 +462,7 @@ bool ScalarColumnReader<InternalType, PARQUET_TYPE, MATERIALIZED>::ReadValueBatc
       // avoids checking for NULL/not-NULL for every value.
       int ret_val_count = 0;
       continue_execution = MaterializeValueBatchRepeatedDefLevel(
-          remaining_val_capacity, tuple_size, next_tuple, &ret_val_count);
+          1, tuple_size, next_tuple, &ret_val_count);
       val_count += ret_val_count;
       batch_val_count += ret_val_count;
     } else {
