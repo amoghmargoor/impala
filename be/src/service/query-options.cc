@@ -884,7 +884,7 @@ Status impala::SetQueryOption(const string& key, const string& value,
         break;
       }
       case TImpalaQueryOptions::PARQUET_MAX_DECODE_BATCH: {
-        int32_t parquet_max_decode_batch;
+        int64_t parquet_max_decode_batch;
         RETURN_IF_ERROR(ParseMemValue(
             value, "parquet object store split size", &parquet_max_decode_batch));
         query_options->__set_parquet_max_decode_batch(
