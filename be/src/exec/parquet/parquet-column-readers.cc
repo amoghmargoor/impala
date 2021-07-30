@@ -422,7 +422,7 @@ bool ScalarColumnReader<InternalType, PARQUET_TYPE, MATERIALIZED>::ReadValueBatc
   int val_count = 0;
   int batch_val_count = 0;
   bool continue_execution = true;
-  int max_decode_batch = parent_->state_->parquet_max_decode_batch();
+  int max_decode_batch = parent_->state_->query_options().parquet_max_decode_batch;
   while (val_count < max_values && !RowGroupAtEnd() && continue_execution) {
     DCHECK_GE(num_buffered_values_, 0);
     // Read next page if necessary. It will skip values if necessary, so we can start
