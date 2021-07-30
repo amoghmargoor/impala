@@ -257,6 +257,8 @@ typedef std::unordered_map<string, beeswax::TQueryOptionLevel::type>
       TQueryOptionLevel::DEVELOPMENT)\
   QUERY_OPT_FN(minmax_filter_partition_columns, MINMAX_FILTER_PARTITION_COLUMNS,\
       TQueryOptionLevel::ADVANCED)\
+  QUERY_OPT_FN(parquet_max_decode_batch, PARQUET_MAX_DECODE_BATCH,\
+      TQueryOptionLevel::DEVELOPMENT)\
   ;
 
 /// Enforce practical limits on some query options to avoid undesired query state.

@@ -883,6 +883,14 @@ Status impala::SetQueryOption(const string& key, const string& value,
             parquet_object_store_split_size);
         break;
       }
+      case TImpalaQueryOptions::PARQUET_MAX_DECODE_BATCH: {
+        int32_t parquet_max_decode_batch;
+        RETURN_IF_ERROR(ParseMemValue(
+            value, "parquet object store split size", &parquet_max_decode_batch));
+        query_options->__set_parquet_max_decode_batch(
+            parquet_max_decode_batch);
+        break;
+      }
       case TImpalaQueryOptions::MEM_LIMIT_EXECUTORS: {
         // Parse the mem limit spec and validate it.
         int64_t bytes_limit;

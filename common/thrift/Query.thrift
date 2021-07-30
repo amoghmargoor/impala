@@ -528,6 +528,7 @@ struct TQueryOptions {
 
   // See comment in ImpalaService.thrift
   134: optional bool minmax_filter_partition_columns = true;
+  135: optional i32  parquet_max_decode_batch = 1024;
 }
 
 // Impala currently has three types of sessions: Beeswax, HiveServer2 and external

@@ -422,6 +422,7 @@ bool ScalarColumnReader<InternalType, PARQUET_TYPE, MATERIALIZED>::ReadValueBatc
   int val_count = 0;
   int batch_val_count = 0;
   bool continue_execution = true;
+  int max_decode_batch = parent_->state_->parquet_max_decode_batch();
   while (val_count < max_values && !RowGroupAtEnd() && continue_execution) {
     DCHECK_GE(num_buffered_values_, 0);
     // Read next page if necessary. It will skip values if necessary, so we can start
@@ -461,8 +462,9 @@ bool ScalarColumnReader<InternalType, PARQUET_TYPE, MATERIALIZED>::ReadValueBatc
       // Fast path to materialize a run of values with the same definition level. This
       // avoids checking for NULL/not-NULL for every value.
       int ret_val_count = 0;
+      int batch_size = min(remaining_val_capacity, max_decode_batch);
       continue_execution = MaterializeValueBatchRepeatedDefLevel(
-          1, tuple_size, next_tuple, &ret_val_count);
+          batch_size, tuple_size, next_tuple, &ret_val_count);
       val_count += ret_val_count;
       batch_val_count += ret_val_count;
     } else {

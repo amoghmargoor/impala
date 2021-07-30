@@ -684,6 +684,8 @@ enum TImpalaQueryOptions {
 
   // Indicates whether to use min/max filtering on partition columns
   MINMAX_FILTER_PARTITION_COLUMNS = 133
+
+  PARQUET_MAX_DECODE_BATCH = 134
 }
 
 // The summary of a DML statement.
