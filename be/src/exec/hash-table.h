@@ -656,7 +656,7 @@ class HashTable {
     ALWAYS_INLINE void SetNode(DuplicateNode* node) { SetPtr(node); }
     // Set Node and UnsetMatched
     ALWAYS_INLINE void SetNodeUnMatched(DuplicateNode* node) {
-      SetData((uintptr_t) node);
+      SetData(reinterpret_cast<uintptr_t>(node));
       DCHECK(!IsMatched());
     }
     ~TaggedDuplicateNode() {}
@@ -712,15 +712,17 @@ class HashTable {
     ALWAYS_INLINE void UnsetMatched() { UnSetTagBit1(); }
     ALWAYS_INLINE void UnsetHasDuplicates() { UnSetTagBit2(); }
     ALWAYS_INLINE void SetDuplicate(DuplicateNode* duplicate) {
-      SetPtr((uint8*) duplicate);
+      SetPtr(reinterpret_cast<uint8*>(duplicate));
     }
-    ALWAYS_INLINE void SetTuple(Tuple* tuple) { SetPtr((uint8*) tuple); }
+    ALWAYS_INLINE void SetTuple(Tuple* tuple) { SetPtr(reinterpret_cast<uint8*>(tuple)); }
     ALWAYS_INLINE void SetFlatRow(BufferedTupleStream::FlatRowPtr flat_row) {
-      SetPtr((uint8*) flat_row);
+      SetPtr(flat_row);
     }
     ALWAYS_INLINE BucketData GetBucketData() {
-      uint8* ptr = GetPtr();
-      return *(reinterpret_cast<BucketData *>(&ptr));
+      // Create BucketData by assigning pointer to any of it's fields
+      BucketData bd;
+      bd.duplicates = reinterpret_cast<DuplicateNode*>(GetPtr())
+      return bd;
     }
     ALWAYS_INLINE void PrepareBucketForInsert() {
       // Sets filled, unsets matched, duplicate and ptr

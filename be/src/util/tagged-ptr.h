@@ -136,7 +136,7 @@ template<class T, bool OWNS=true> class TaggedPtr {
  protected:
   // Don't use unless client wants to retain the ownership of pointer.
   ALWAYS_INLINE void SetPtr(T* ptr) {
-    data_ = (data_ & ~MASK_0_56_BITS) | ((uintptr_t) ptr);
+    data_ = (data_ & ~MASK_0_56_BITS) | (reinterpret_cast<uintptr_t>(ptr));
   }
   ALWAYS_INLINE void SetData(uintptr_t data) {
     data_ = data;
