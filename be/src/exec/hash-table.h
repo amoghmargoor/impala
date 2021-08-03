@@ -721,10 +721,12 @@ class HashTable {
     template <const bool TAGGED>
     ALWAYS_INLINE BucketData bucket_data() {
       if (TAGGED) {
-        return *(reinterpret_cast<BucketData*>(&GetPtr()));
+        uint8_t* ptr = GetPtr();
+        return *(reinterpret_cast<BucketData*>(&ptr));
       } else {
         // If data is not tagged read it directly
-        return *(reinterpret_cast<BucketData*>(&GetData()));
+        uint8_t* ptr = GetData();
+        return *(reinterpret_cast<BucketData*>(&ptr));
       }
     }
     template <const bool TAGGED>
@@ -739,10 +741,12 @@ class HashTable {
     template <const bool TAGGED>
     ALWAYS_INLINE HtData GetHtData() {
       if (TAGGED) {
-        return *(reinterpret_cast<HtData*>(&GetPtr()));
+        uint8_t* ptr = GetPtr();
+        return *(reinterpret_cast<HtData*>(&ptr));
       } else {
+        uint8_t* ptr = GetData();
         // If data is not tagged read it directly
-        return *(reinterpret_cast<HtData*>(&GetPtr()));
+        return *(reinterpret_cast<HtData*>(&ptr));
       }
     }
     ALWAYS_INLINE void PrepareBucketForInsert() { SetData(0); }
