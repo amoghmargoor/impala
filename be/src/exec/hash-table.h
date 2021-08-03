@@ -731,7 +731,7 @@ class HashTable {
     ALWAYS_INLINE void InsertNewBucketData(uintptr_t data) {
       // Sets filled, unsets matched, unsets duplicate along with
       // setting data.
-      SetData(data);
+      SetData(data | 0x8000000000000000);
     }
     TaggedBucketData & operator=(const TaggedBucketData & bd) = default;
     ~TaggedBucketData() {}

@@ -141,9 +141,6 @@ template<class T, bool OWNS=true> class TaggedPtr {
   ALWAYS_INLINE void SetData(uintptr_t data) {
     data_ = data;
   }
-  ALWAYS_INLINE uintptr_t GetData() {
-    return data_;
-  }
   // No copies allowed to ensure no leaking of ownership.
   // Derived classes can opt to enable it.
   TaggedPtr(const TaggedPtr &) = default;
