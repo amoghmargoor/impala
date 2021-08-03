@@ -123,7 +123,7 @@ Status GroupingAggregator::Partition::SerializeStreamForSpilling() {
     // could occupy it.
     bool used_large_page_reservation = false;
     while (!it.AtEnd()) {
-      Tuple* tuple = it.GetTuple();
+      Tuple* tuple = it.GetTuple<false>();
       it.Next();
       AggFnEvaluator::Serialize(agg_fn_evals, tuple);
       TupleRow* row = reinterpret_cast<TupleRow*>(&tuple);
