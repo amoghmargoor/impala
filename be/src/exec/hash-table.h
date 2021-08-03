@@ -720,14 +720,16 @@ class HashTable {
     }
     template <const bool TAGGED>
     ALWAYS_INLINE BucketData bucket_data() {
-      if (TAGGED) {
-        uint8_t* ptr = GetPtr();
-        return *(reinterpret_cast<BucketData*>(&ptr));
-      } else {
-        // If data is not tagged read it directly
-        uint8_t* ptr = reinterpret_cast<uint8_t*>(GetData());
-        return *(reinterpret_cast<BucketData*>(&ptr));
-      }
+      // if (TAGGED) {
+      //   uint8_t* ptr = GetPtr();
+      //   return *(reinterpret_cast<BucketData*>(&ptr));
+      // } else {
+      //   // If data is not tagged read it directly
+      //   uint8_t* ptr = reinterpret_cast<uint8_t*>(GetData());
+      //   return *(reinterpret_cast<BucketData*>(&ptr));
+      // }
+      uint8_t* ptr = reinterpret_cast<uint8_t*>(GetData());
+      return *(reinterpret_cast<BucketData*>(&ptr));
     }
     template <const bool TAGGED>
     ALWAYS_INLINE DuplicateNode* GetDuplicate() {
