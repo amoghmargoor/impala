@@ -874,7 +874,7 @@ class HashTable {
   /// should be inserted. Returns End() if the table is full. The caller can set the data
   /// in the bucket using a Set*() method on the iterator.
   /// Thread-safe for read-only hash tables.
-  template<const bool GET_TUPLE = false>
+  template<const bool TAGGED = false>
   Iterator IR_ALWAYS_INLINE FindBuildRowBucket(
       HashTableCtx* __restrict__ ht_ctx, bool* found, Tuple** tuple = nullptr);
 
