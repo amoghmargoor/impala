@@ -725,7 +725,7 @@ class HashTable {
         return *(reinterpret_cast<BucketData*>(&ptr));
       } else {
         // If data is not tagged read it directly
-        uint8_t* ptr = GetData();
+        uint8_t* ptr = reinterpret_cast<uint8_t*>(GetData());
         return *(reinterpret_cast<BucketData*>(&ptr));
       }
     }
@@ -744,7 +744,7 @@ class HashTable {
         uint8_t* ptr = GetPtr();
         return *(reinterpret_cast<HtData*>(&ptr));
       } else {
-        uint8_t* ptr = GetData();
+        uint8_t* ptr = reinterpret_cast<uint8_t*>(GetData());
         // If data is not tagged read it directly
         return *(reinterpret_cast<HtData*>(&ptr));
       }
