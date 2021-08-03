@@ -719,6 +719,15 @@ class HashTable {
       SetPtr(flat_row);
     }
     template <const bool TAGGED>
+    ALWAYS_INLINE BucketData bucket_data() {
+      if (TAGGED) {
+        return *(reinterpret_cast<BucketData*>(&GetPtr()));
+      } else {
+        // If data is not tagged read it directly
+        return *(reinterpret_cast<BucketData*>(&GetData()));
+      }
+    }
+    template <const bool TAGGED>
     ALWAYS_INLINE DuplicateNode* GetDuplicate() {
       if (TAGGED) {
         return reinterpret_cast<DuplicateNode*>(GetPtr());
@@ -729,14 +738,12 @@ class HashTable {
     }
     template <const bool TAGGED>
     ALWAYS_INLINE HtData GetHtData() {
-      HtData htdata;
       if (TAGGED) {
-        htdata.tuple = reinterpret_cast<Tuple*>(GetPtr());
+        return *(reinterpret_cast<HtData*>(&GetPtr()));
       } else {
         // If data is not tagged read it directly
-        htdata.tuple = reinterpret_cast<Tuple*>(GetData());
+        return *(reinterpret_cast<HtData*>(&GetPtr()));
       }
-      return htdata;
     }
     ALWAYS_INLINE void PrepareBucketForInsert() { SetData(0); }
     ALWAYS_INLINE void InsertNewBucketData(uintptr_t data) { SetData(data); }
@@ -758,6 +765,8 @@ class HashTable {
     ALWAYS_INLINE DuplicateNode* GetDuplicate() { return bd.GetDuplicate<TAGGED>(); }
     template <const bool TAGGED = true>
     ALWAYS_INLINE HtData GetHtData() { return bd.GetHtData<TAGGED>(); }
+    template <const bool TAGGED = true>
+    ALWAYS_INLINE BucketData bucket_data() { return bd.bucket_data<TAGGED>(); }
     /// Whether this bucket contains a vaild entry, or it is empty.
     ALWAYS_INLINE bool IsFilled() { return bd.IsFilled(); }
     /// Indicates whether the row in the bucket has been matched.

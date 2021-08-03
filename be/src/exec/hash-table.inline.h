@@ -294,6 +294,7 @@ template <const bool TAGGED>
 inline TupleRow* IR_ALWAYS_INLINE HashTable::GetRow(
     Bucket* bucket, TupleRow* row, BucketData* bucket_data) const {
   DCHECK(bucket != NULL);
+  *bucket_data = bucket->bucket_data();
   if (UNLIKELY(stores_duplicates() && bucket->HasDuplicates())) {
     DuplicateNode* duplicate = bucket_data->duplicates;
     DCHECK(duplicate != NULL);
