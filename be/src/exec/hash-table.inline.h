@@ -64,7 +64,7 @@ inline int64_t HashTable::Probe(Bucket* buckets, uint32_t* hash_array,
   int64_t step = 0;
   do {
     Bucket* bucket = &buckets[bucket_idx];
-    if (LIKELY(!(hash_array[bucket_idx] == 0))) return bucket_idx;
+    if (LIKELY(hash_array[bucket_idx] == 0)) return bucket_idx;
     if (hash == hash_array[bucket_idx]) {
       if (COMPARE_ROW
           && ht_ctx->Equals<INCLUSIVE_EQUALITY>(
