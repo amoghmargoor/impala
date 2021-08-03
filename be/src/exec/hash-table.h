@@ -721,7 +721,7 @@ class HashTable {
     ALWAYS_INLINE BucketData GetBucketData() {
       // Create BucketData by assigning pointer to any of it's fields
       BucketData bd;
-      bd.duplicates = reinterpret_cast<DuplicateNode*>(GetPtr())
+      bd.duplicates = reinterpret_cast<DuplicateNode*>(GetPtr());
       return bd;
     }
     ALWAYS_INLINE void PrepareBucketForInsert() {
