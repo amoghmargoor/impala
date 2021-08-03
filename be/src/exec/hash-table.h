@@ -718,20 +718,28 @@ class HashTable {
     ALWAYS_INLINE void SetFlatRow(BufferedTupleStream::FlatRowPtr flat_row) {
       SetPtr(flat_row);
     }
-    ALWAYS_INLINE BucketData GetBucketData() {
-      // Create BucketData by assigning pointer to any of it's fields
-      BucketData bd;
-      bd.duplicates = reinterpret_cast<DuplicateNode*>(GetPtr());
-      return bd;
+    template <const bool TAGGED>
+    ALWAYS_INLINE DuplicateNode* GetDuplicate() {
+      if (TAGGED) {
+        return reinterpret_cast<DuplicateNode*>(GetPtr());
+      } else {
+        // If data is not tagged read it directly
+        return reinterpret_cast<DuplicateNode*>(GetData());
+      }
     }
-    ALWAYS_INLINE void PrepareBucketForInsert() {
-      // Resets Data
-      SetData(0);
+    template <const bool TAGGED>
+    ALWAYS_INLINE HtData GetHtData() {
+      HtData htdata;
+      if (TAGGED) {
+        htdata.tuple = reinterpret_cast<Tuple*>(GetPtr());
+      } else {
+        // If data is not tagged read it directly
+        htdata.tuple = reinterpret_cast<Tuple*>(GetData());
+      }
+      return htdata;
     }
-    ALWAYS_INLINE void InsertNewBucketData(uintptr_t data) {
-      // Sets Data
-      SetData(data);
-    }
+    ALWAYS_INLINE void PrepareBucketForInsert() { SetData(0); }
+    ALWAYS_INLINE void InsertNewBucketData(uintptr_t data) { SetData(data); }
     TaggedBucketData & operator=(const TaggedBucketData & bd) = default;
     ~TaggedBucketData() {}
   };
@@ -746,7 +754,10 @@ class HashTable {
   ///    is used.
   struct Bucket {
     /// Either the data for this bucket or the linked list of duplicates.
-    ALWAYS_INLINE BucketData bucket_data() { return bd.GetBucketData(); }
+    template <const bool TAGGED = true>
+    ALWAYS_INLINE DuplicateNode* GetDuplicate() { return bd.GetDuplicate<TAGGED>(); }
+    template <const bool TAGGED = true>
+    ALWAYS_INLINE HtData GetHtData() { return bd.GetHtData<TAGGED>(); }
     /// Whether this bucket contains a vaild entry, or it is empty.
     ALWAYS_INLINE bool IsFilled() { return bd.IsFilled(); }
     /// Indicates whether the row in the bucket has been matched.
@@ -995,8 +1006,11 @@ class HashTable {
     /// Return the current row or tuple. Callers must check the iterator is not AtEnd()
     /// before calling them.  The returned row is owned by the iterator and valid until
     /// the next call to GetRow(). It is safe to advance the iterator.
+    /// 'TAGGED' is true when Bucket can be 'IsDuplicate()' or 'IsMatched()'
     /// Thread-safe for read-only hash tables.
+    template <const bool TAGGED = true>
     TupleRow* IR_ALWAYS_INLINE GetRow() const;
+    template <const bool TAGGED = true>
     Tuple* IR_ALWAYS_INLINE GetTuple() const;
 
     /// Set the current tuple for an empty bucket. Designed to be used with the iterator
@@ -1088,7 +1102,7 @@ class HashTable {
   /// 'found' indicates that a bucket that contains an equal row is found.
   ///
   /// There are wrappers of this function that perform the Find and Insert logic.
-  template <bool INCLUSIVE_EQUALITY, bool COMPARE_ROW>
+  template <bool INCLUSIVE_EQUALITY, bool COMPARE_ROW, bool TAGGED = true>
   int64_t IR_ALWAYS_INLINE Probe(Bucket* buckets, uint32_t* hash_array,
       int64_t num_buckets, HashTableCtx* __restrict__ ht_ctx, uint32_t hash,
       bool* found, BucketData* bd);
@@ -1150,6 +1164,9 @@ class HashTable {
   /// Returns the TupleRow of the pointed 'bucket'. In case of duplicates, it
   /// returns the content of the first chained duplicate node of the bucket.
   /// It also fills 'bd' with the BucketData of 'bucket'.
+  /// Template Parameter TAGGED is denote if bucket can be tagged i.e., 
+  /// They can either have duplicates or matched buckets.
+  template <const bool TAGGED = true>
   TupleRow* GetRow(Bucket* bucket, TupleRow* row, BucketData* bd) const;
 
   /// Grow the node array. Returns true and sets 'status' to OK on success. Returns false

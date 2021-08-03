@@ -110,8 +110,7 @@ Status GroupingAggregator::ProcessRow(
   bool found;
   // Find the appropriate bucket in the hash table. There will always be a free
   // bucket because we checked the size above.
-  Tuple* tuple;
-  HashTable::Iterator it = hash_tbl->FindBuildRowBucket<true>(ht_ctx, &found, &tuple);
+  HashTable::Iterator it = hash_tbl->FindBuildRowBucket<false>(ht_ctx, &found);
   DCHECK(!it.AtEnd()) << "Hash table had no free buckets";
   if (AGGREGATED_ROWS) {
     // If the row is already an aggregate row, it cannot match anything in the
@@ -120,7 +119,7 @@ Status GroupingAggregator::ProcessRow(
     DCHECK(!found);
   } else if (found) {
     // Row is already in hash table. Do the aggregation and we're done.
-    UpdateTuple(dst_partition->agg_fn_evals.data(), tuple, row);
+    UpdateTuple(dst_partition->agg_fn_evals.data(), it.GetTuple<false>(), row);
     return Status::OK();
   }
 
@@ -235,10 +234,10 @@ bool GroupingAggregator::TryAddToHashTable(HashTableCtx* __restrict__ ht_ctx,
   bool found;
   Tuple* intermediate_tuple;
   // This is called from ProcessBatchStreaming() so the rows are not aggregated.
-  HashTable::Iterator it = hash_tbl->FindBuildRowBucket<true>(ht_ctx, &found,
-    &intermediate_tuple);
-  
-  if (!found) {
+  HashTable::Iterator it = hash_tbl->FindBuildRowBucket<false>(ht_ctx, &found);
+  if (found) {
+    intermediate_tuple = it.GetTuple<false>();
+  } else {
     if (*remaining_capacity == 0) {
       return false;
     } else {
