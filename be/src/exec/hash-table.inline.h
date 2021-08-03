@@ -294,14 +294,13 @@ template <const bool TAGGED>
 inline TupleRow* IR_ALWAYS_INLINE HashTable::GetRow(
     Bucket* bucket, TupleRow* row, BucketData* bucket_data) const {
   DCHECK(bucket != NULL);
-  *bucket_data = bucket->bucket_data();
   if (UNLIKELY(stores_duplicates() && bucket->HasDuplicates())) {
+    *bucket_data = bucket->bucket_data();
     DuplicateNode* duplicate = bucket_data->duplicates;
     DCHECK(duplicate != NULL);
-    (*bucket_data).duplicates = duplicate;
     return GetRow(duplicate->htdata, row);
   } else {
-    (*bucket_data).htdata = bucket->GetHtData<TAGGED>();
+    *bucket_data = bucket->bucket_data<TAGGED>();
     return GetRow(bucket_data->htdata, row);
   }
 }
