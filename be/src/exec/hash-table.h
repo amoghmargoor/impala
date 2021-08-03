@@ -728,8 +728,9 @@ class HashTable {
       //   uint8_t* ptr = reinterpret_cast<uint8_t*>(GetData());
       //   return *(reinterpret_cast<BucketData*>(&ptr));
       // }
-      uint8_t* ptr = reinterpret_cast<uint8_t*>(GetData());
-      return *(reinterpret_cast<BucketData*>(&ptr));
+      BucketData bd;
+      bd.htdata.tuple = reinterpret_cast<Tuple*>(GetData());
+      return bd;
     }
     template <const bool TAGGED>
     ALWAYS_INLINE DuplicateNode* GetDuplicate() {
