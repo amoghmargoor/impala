@@ -702,15 +702,15 @@ class HashTable {
   class TaggedBucketData : public TaggedPtr<uint8, false> {
    public:
     TaggedBucketData() = default;
-    ALWAYS_INLINE bool IsFilled() { return IsTagBitSet0(); }
-    ALWAYS_INLINE bool IsMatched() { return IsTagBitSet1(); }
-    ALWAYS_INLINE bool HasDuplicates() { return IsTagBitSet2(); }
-    ALWAYS_INLINE void SetFilled() { SetTagBit0(); }
-    ALWAYS_INLINE void SetMatched() { SetTagBit1(); }
-    ALWAYS_INLINE void SetHasDuplicates() { SetTagBit2(); }
-    ALWAYS_INLINE void UnsetFilled() { UnSetTagBit0(); }
-    ALWAYS_INLINE void UnsetMatched() { UnSetTagBit1(); }
-    ALWAYS_INLINE void UnsetHasDuplicates() { UnSetTagBit2(); }
+    ALWAYS_INLINE bool IsFilled() { return GetData() != 0; }
+    ALWAYS_INLINE bool IsMatched() { return IsTagBitSet0(); }
+    ALWAYS_INLINE bool HasDuplicates() { return IsTagBitSet1(); }
+    // ALWAYS_INLINE void SetFilled() { SetTagBit0(); }
+    ALWAYS_INLINE void SetMatched() { SetTagBit0(); }
+    ALWAYS_INLINE void SetHasDuplicates() { SetTagBit1(); }
+    // ALWAYS_INLINE void UnsetFilled() { UnSetTagBit0(); }
+    ALWAYS_INLINE void UnsetMatched() { UnSetTagBit0(); }
+    ALWAYS_INLINE void UnsetHasDuplicates() { UnSetTagBit1(); }
     ALWAYS_INLINE void SetDuplicate(DuplicateNode* duplicate) {
       SetPtr(reinterpret_cast<uint8*>(duplicate));
     }
@@ -725,13 +725,12 @@ class HashTable {
       return bd;
     }
     ALWAYS_INLINE void PrepareBucketForInsert() {
-      // Sets filled, unsets matched, duplicate and ptr
-      SetData(0x8000000000000000);
+      // Resets Data
+      SetData(0);
     }
     ALWAYS_INLINE void InsertNewBucketData(uintptr_t data) {
-      // Sets filled, unsets matched, unsets duplicate along with
-      // setting data.
-      SetData(data | 0x8000000000000000);
+      // Sets Data
+      SetData(data);
     }
     TaggedBucketData & operator=(const TaggedBucketData & bd) = default;
     ~TaggedBucketData() {}
@@ -757,11 +756,11 @@ class HashTable {
     ALWAYS_INLINE bool HasDuplicates() { return bd.HasDuplicates(); }
 
     // Set/Unset methods corresponding to above.
-    ALWAYS_INLINE void SetFilled() { bd.SetFilled(); }
+    // ALWAYS_INLINE void SetFilled() { bd.SetFilled(); }
     ALWAYS_INLINE void SetMatched() { bd.SetMatched(); }
     ALWAYS_INLINE void SetHasDuplicates() { bd.SetHasDuplicates(); }
-    ALWAYS_INLINE void UnsetFilled() { bd.UnsetFilled(); }
-    ALWAYS_INLINE void UnsetMatched() { bd.UnsetMatched(); }
+    // ALWAYS_INLINE void UnsetFilled() { bd.UnsetFilled(); }
+    // ALWAYS_INLINE void UnsetMatched() { bd.UnsetMatched(); }
     ALWAYS_INLINE void UnsetHasDuplicates() { bd.UnsetHasDuplicates(); }
     // Setting Data or Duplicate Node
     ALWAYS_INLINE void SetDuplicate(DuplicateNode* node) { bd.SetDuplicate(node); }

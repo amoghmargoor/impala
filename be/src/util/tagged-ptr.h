@@ -113,9 +113,7 @@ template<class T, bool OWNS=true> class TaggedPtr {
 
   ALWAYS_INLINE int GetTag() const { return data_ >> 57; }
 
-  ALWAYS_INLINE T* GetPtr() const {
-    return (T*) (data_ & MASK_0_56_BITS);
-  }
+  ALWAYS_INLINE T* GetPtr() const { return (T*) (data_ & MASK_0_56_BITS); }
 
   T& operator*() const noexcept { return *GetPtr();}
 
@@ -138,9 +136,8 @@ template<class T, bool OWNS=true> class TaggedPtr {
   ALWAYS_INLINE void SetPtr(T* ptr) {
     data_ = (data_ & ~MASK_0_56_BITS) | (reinterpret_cast<uintptr_t>(ptr));
   }
-  ALWAYS_INLINE void SetData(uintptr_t data) {
-    data_ = data;
-  }
+  ALWAYS_INLINE void SetData(uintptr_t data) { data_ = data; }
+  ALWAYS_INLINE uintptr_t GetData() { return data_; }
   // No copies allowed to ensure no leaking of ownership.
   // Derived classes can opt to enable it.
   TaggedPtr(const TaggedPtr &) = default;
