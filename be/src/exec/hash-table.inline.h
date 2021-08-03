@@ -170,10 +170,6 @@ template<const bool GET_TUPLE>
 inline HashTable::Iterator HashTable::FindBuildRowBucket(
     HashTableCtx* __restrict__ ht_ctx, bool* found, Tuple** row) {
   uint32_t hash = ht_ctx->expr_values_cache()->CurExprValuesHash();
-  if (hash == last_hash_) {
-    *row = last_tuple_;
-    return Iterator(this, ht_ctx->scratch_row(), last_bucket_idx_, last_duplicates_);
-  }
   BucketData bd;
   int64_t bucket_idx =
       Probe<true, true>(buckets_, hash_array_, num_buckets_, ht_ctx, hash, found, &bd);
@@ -183,12 +179,7 @@ inline HashTable::Iterator HashTable::FindBuildRowBucket(
   }
   if (GET_TUPLE) {
     *row = bd.htdata.tuple;
-    last_tuple_ = bd.htdata.tuple;
   }
-  last_hash_ = hash;
-  last_bucket_idx_ = bucket_idx;
-  last_duplicates_ = duplicates;
-
   return Iterator(this, ht_ctx->scratch_row(), bucket_idx, duplicates);
 }
 
