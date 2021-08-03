@@ -1057,6 +1057,11 @@ class HashTable {
   friend class Iterator;
   friend class HashTableTest;
 
+  Tuple* last_tuple_ = NULL;
+  DuplicateNode* last_duplicates_ = NULL;
+  int32_t last_hash_;
+  int last_bucket_idx_;
+
   /// Hash table constructor. Private because Create() should be used, instead
   /// of calling this constructor directly.
   ///  - quadratic_probing: set to true when the probing algorithm is quadratic, as
