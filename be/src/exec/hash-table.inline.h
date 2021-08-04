@@ -121,7 +121,7 @@ inline bool HashTable::Insert(HashTableCtx* __restrict__ ht_ctx,
   if (UNLIKELY(bucket == NULL)) return false;
   // If successful insert, update the contents of the newly inserted entry with 'idx'.
   if (bucket->HasDuplicates()) {
-    DuplicateNode* node = bucket->GetDuplicate();
+    DuplicateNode* node = bucket->GetBucketData().duplicates;
     if (UNLIKELY(node == NULL)) return false;
     if (stores_tuples()) {
       node->htdata.tuple = row->GetTuple(0);
@@ -208,7 +208,8 @@ inline void HashTable::NextFilledBucket(int64_t* bucket_idx, DuplicateNode** nod
   ++*bucket_idx;
   for (; *bucket_idx < num_buckets_; ++*bucket_idx) {
     if (buckets_[*bucket_idx].IsFilled()) {
-      *node = stores_duplicates() ? buckets_[*bucket_idx].GetDuplicate() : NULL;
+      *node = stores_duplicates() ? buckets_[*bucket_idx].GetBucketData().duplicates
+        : NULL;
       return;
     }
   }
@@ -218,7 +219,13 @@ inline void HashTable::NextFilledBucket(int64_t* bucket_idx, DuplicateNode** nod
 }
 
 inline void HashTable::PrepareBucketForInsert(int64_t bucket_idx, uint32_t hash) {
-  InsertOrPrepareNewBucketData<false>(bucket_idx, hash);
+  DCHECK_GE(bucket_idx, 0);
+  DCHECK_LT(bucket_idx, num_buckets_);
+  Bucket* bucket = &buckets_[bucket_idx];
+  DCHECK(!bucket->IsFilled());
+  ++num_filled_buckets_;
+  bucket->PrepareBucketForInsert();
+  hash_array_[bucket_idx] = hash;
 }
 
 inline void HashTable::InsertNewBucketTupleData(int64_t bucket_idx, uint32_t hash,
@@ -275,7 +282,7 @@ inline HashTable::DuplicateNode* HashTable::InsertDuplicateNode(
     ++num_buckets_with_duplicates_;
   }
   // Link a new node and UnsetMatched
-  next_node_->SetNextUnMatched(bucket->GetDuplicate());
+  next_node_->SetNextUnMatched(bucket->GetBucketData().duplicates);
   return AppendNextNode(bucket);
 }
 
@@ -306,7 +313,6 @@ inline TupleRow* IR_ALWAYS_INLINE HashTable::GetRow(
   }
 }
 
-template <const bool TAGGED>
 inline TupleRow* IR_ALWAYS_INLINE HashTable::Iterator::GetRow() const {
   DCHECK(!AtEnd());
   DCHECK(table_ != NULL);
@@ -316,7 +322,7 @@ inline TupleRow* IR_ALWAYS_INLINE HashTable::Iterator::GetRow() const {
     DCHECK(node_ != NULL);
     return table_->GetRow(node_->htdata, scratch_row_);
   } else {
-    HtData htdata = bucket->GetHtData();
+    HtData htdata = bucket->GetBucketData().htdata;
     return table_->GetRow(htdata, scratch_row_);
   }
 }
@@ -331,14 +337,15 @@ inline Tuple* IR_ALWAYS_INLINE HashTable::Iterator::GetTuple() const {
     DCHECK(node_ != NULL);
     return node_->htdata.tuple;
   } else {
-    return bucket->GetHtData<TAGGED>().tuple;
+    return bucket->GetBucketData<TAGGED>().htdata.tuple;
   }
 }
 
 inline void HashTable::Iterator::SetTuple(Tuple* tuple, uint32_t hash) {
   DCHECK(!AtEnd());
   DCHECK(table_->stores_tuples());
-  table_->InsertNewBucketTupleData(bucket_idx_, hash, tuple);
+  table_->PrepareBucketForInsert(bucket_idx_, hash, tuple);
+  table_->buckets_[bucket_idx].SetTuple<false>(tuple);
 }
 
 inline void HashTable::Iterator::SetMatched() {

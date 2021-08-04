@@ -652,7 +652,6 @@ class HashTable {
    public:
     ALWAYS_INLINE bool IsMatched() { return IsTagBitSet0(); }
     ALWAYS_INLINE void SetMatched() { SetTagBit0(); }
-    ALWAYS_INLINE void UnsetMatched() { UnSetTagBit0(); }
     ALWAYS_INLINE void SetNode(DuplicateNode* node) { SetPtr(node); }
     // Set Node and UnsetMatched
     ALWAYS_INLINE void SetNodeUnMatched(DuplicateNode* node) {
@@ -671,7 +670,6 @@ class HashTable {
     ALWAYS_INLINE void SetNext(DuplicateNode* node) { tdn.SetNode(node); }
     ALWAYS_INLINE bool IsMatched() { return tdn.IsMatched(); }
     ALWAYS_INLINE void SetMatched() { tdn.SetMatched(); }
-    ALWAYS_INLINE void UnsetMatched() { tdn.UnsetMatched(); }
     ALWAYS_INLINE void SetNextUnMatched(DuplicateNode* node) {
       tdn.SetNodeUnMatched(node);
     }
@@ -705,55 +703,28 @@ class HashTable {
     ALWAYS_INLINE bool IsFilled() { return GetData() != 0; }
     ALWAYS_INLINE bool IsMatched() { return IsTagBitSet0(); }
     ALWAYS_INLINE bool HasDuplicates() { return IsTagBitSet1(); }
-    // ALWAYS_INLINE void SetFilled() { SetTagBit0(); }
     ALWAYS_INLINE void SetMatched() { SetTagBit0(); }
     ALWAYS_INLINE void SetHasDuplicates() { SetTagBit1(); }
-    // ALWAYS_INLINE void UnsetFilled() { UnSetTagBit0(); }
-    ALWAYS_INLINE void UnsetMatched() { UnSetTagBit0(); }
-    ALWAYS_INLINE void UnsetHasDuplicates() { UnSetTagBit1(); }
-    ALWAYS_INLINE void SetDuplicate(DuplicateNode* duplicate) {
-      SetPtr(reinterpret_cast<uint8*>(duplicate));
-    }
-    ALWAYS_INLINE void SetTuple(Tuple* tuple) { SetPtr(reinterpret_cast<uint8*>(tuple)); }
-    ALWAYS_INLINE void SetFlatRow(BufferedTupleStream::FlatRowPtr flat_row) {
-      SetPtr(flat_row);
-    }
-    template <const bool TAGGED>
-    ALWAYS_INLINE BucketData bucket_data() {
-      // if (TAGGED) {
-      //   uint8_t* ptr = GetPtr();
-      //   return *(reinterpret_cast<BucketData*>(&ptr));
-      // } else {
-      //   // If data is not tagged read it directly
-      //   uint8_t* ptr = reinterpret_cast<uint8_t*>(GetData());
-      //   return *(reinterpret_cast<BucketData*>(&ptr));
-      // }
-      BucketData bd;
-      bd.htdata.tuple = reinterpret_cast<Tuple*>(GetData());
-      return bd;
-    }
-    template <const bool TAGGED>
-    ALWAYS_INLINE DuplicateNode* GetDuplicate() {
+    template <class T, const bool TAGGED>
+    ALWAYS_INLINE void SetBucketData(T* data) { 
       if (TAGGED) {
-        return reinterpret_cast<DuplicateNode*>(GetPtr());
+        SetPtr(reinterpret_cast<uint8*>(data));
       } else {
-        // If data is not tagged read it directly
-        return reinterpret_cast<DuplicateNode*>(GetData());
+        SetData(reinterpret_cast<uintptr_t>(data));
       }
     }
     template <const bool TAGGED>
-    ALWAYS_INLINE HtData GetHtData() {
+    ALWAYS_INLINE BucketData GetBucketData() {
       if (TAGGED) {
         uint8_t* ptr = GetPtr();
-        return *(reinterpret_cast<HtData*>(&ptr));
+        return *(reinterpret_cast<BucketData*>(&ptr));
       } else {
-        uint8_t* ptr = reinterpret_cast<uint8_t*>(GetData());
         // If data is not tagged read it directly
-        return *(reinterpret_cast<HtData*>(&ptr));
+        uint8_t* ptr = reinterpret_cast<uint8_t*>(GetData());
+        return *(reinterpret_cast<BucketData*>(&ptr));
       }
     }
     ALWAYS_INLINE void PrepareBucketForInsert() { SetData(0); }
-    ALWAYS_INLINE void InsertNewBucketData(uintptr_t data) { SetData(data); }
     TaggedBucketData & operator=(const TaggedBucketData & bd) = default;
     ~TaggedBucketData() {}
   };
@@ -769,11 +740,7 @@ class HashTable {
   struct Bucket {
     /// Either the data for this bucket or the linked list of duplicates.
     template <const bool TAGGED = true>
-    ALWAYS_INLINE DuplicateNode* GetDuplicate() { return bd.GetDuplicate<TAGGED>(); }
-    template <const bool TAGGED = true>
-    ALWAYS_INLINE HtData GetHtData() { return bd.GetHtData<TAGGED>(); }
-    template <const bool TAGGED = true>
-    ALWAYS_INLINE BucketData bucket_data() { return bd.bucket_data<TAGGED>(); }
+    ALWAYS_INLINE BucketData GetBucketData() { return bd.bucket_data<TAGGED>(); }
     /// Whether this bucket contains a vaild entry, or it is empty.
     ALWAYS_INLINE bool IsFilled() { return bd.IsFilled(); }
     /// Indicates whether the row in the bucket has been matched.
@@ -783,23 +750,21 @@ class HashTable {
     ALWAYS_INLINE bool HasDuplicates() { return bd.HasDuplicates(); }
 
     // Set/Unset methods corresponding to above.
-    // ALWAYS_INLINE void SetFilled() { bd.SetFilled(); }
     ALWAYS_INLINE void SetMatched() { bd.SetMatched(); }
     ALWAYS_INLINE void SetHasDuplicates() { bd.SetHasDuplicates(); }
-    // ALWAYS_INLINE void UnsetFilled() { bd.UnsetFilled(); }
-    // ALWAYS_INLINE void UnsetMatched() { bd.UnsetMatched(); }
-    ALWAYS_INLINE void UnsetHasDuplicates() { bd.UnsetHasDuplicates(); }
     // Setting Data or Duplicate Node
-    ALWAYS_INLINE void SetDuplicate(DuplicateNode* node) { bd.SetDuplicate(node); }
-    ALWAYS_INLINE void SetTuple(Tuple* tuple) { bd.SetTuple(tuple); }
+    template <const bool TAGGED = true>
+    ALWAYS_INLINE void SetDuplicate(DuplicateNode* node) {
+      bd.SetBucketData<DuplicateNode, TAGGED>(node);
+    }
+    template <const bool TAGGED = true>
+    ALWAYS_INLINE void SetTuple(Tuple* tuple) { bd.SetBucketData<Tuple, TAGGED>(tuple); }
+    template <const bool TAGGED = true>
     ALWAYS_INLINE void SetFlatRow(BufferedTupleStream::FlatRowPtr flat_row) {
-      bd.SetFlatRow(flat_row);
+      bd.SetBucketData<uint8_t, TAGGED>(flat_row);
     }
     ALWAYS_INLINE void PrepareBucketForInsert() {
       bd.PrepareBucketForInsert();
-    }
-    ALWAYS_INLINE void InsertNewBucketData(uintptr_t data) {
-      bd.InsertNewBucketData(data);
     }
    private:
     // This should not be exposed outside as implementation details
@@ -1024,7 +989,6 @@ class HashTable {
     /// the next call to GetRow(). It is safe to advance the iterator.
     /// 'TAGGED' is true when Bucket can be 'IsDuplicate()' or 'IsMatched()'
     /// Thread-safe for read-only hash tables.
-    template <const bool TAGGED = true>
     TupleRow* IR_ALWAYS_INLINE GetRow() const;
     template <const bool TAGGED = true>
     Tuple* IR_ALWAYS_INLINE GetTuple() const;

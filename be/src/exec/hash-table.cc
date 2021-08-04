@@ -661,7 +661,7 @@ string HashTable::DebugString(bool skip_empty, bool show_match,
       }
     }
     if (buckets_[i].HasDuplicates()) {
-      DuplicateNode* node = buckets_[i].GetDuplicate();
+      DuplicateNode* node = buckets_[i].GetBucketData().duplicates;
       bool first = true;
       ss << " [D] ";
       while (node != NULL) {
@@ -673,7 +673,7 @@ string HashTable::DebugString(bool skip_empty, bool show_match,
     } else {
       ss << " [B] ";
       if (buckets_[i].IsFilled()) {
-        HtData htdata = buckets_[i].GetHtData();
+        HtData htdata = buckets_[i].GetBucketData().htdata;
         DebugStringTuple(ss, htdata, desc);
       } else {
         ss << " - ";
