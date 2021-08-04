@@ -912,9 +912,6 @@ class HashTable {
   /// inserted without need to resize. If there is not enough memory available to
   /// resize the hash table, Status::OK() is returned and 'got_memory' is false. If a
   /// another error occurs, an error status may be returned.
-  /// 'MATCH' is true if HashTable buckets can have matched flag set. For instance
-  /// Grouping Aggregate would not need that.
-  template<bool MATCH = true>
   Status CheckAndResize(uint64_t buckets_to_fill, HashTableCtx* __restrict__ ht_ctx,
       bool* got_memory) WARN_UNUSED_RESULT;
 
@@ -1108,9 +1105,6 @@ class HashTable {
   void NextFilledBucket(int64_t* bucket_idx, DuplicateNode** node);
 
   /// Resize the hash table to 'num_buckets'. 'got_memory' is false on OOM.
-  /// 'MATCH' is true if HashTable buckets can have matched flag set. For instance
-  /// Grouping Aggregate would not need that.
-  template<bool MATCH = true>
   Status ResizeBuckets(
       int64_t num_buckets, HashTableCtx* __restrict__ ht_ctx, bool* got_memory);
 

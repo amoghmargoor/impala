@@ -538,7 +538,6 @@ void HashTable::StatsCountersAdd(HashTableStatsProfile* profile) {
   COUNTER_ADD(profile->num_hash_resizes_, num_resizes_);
 }
 
-template<bool MATCH>
 Status HashTable::CheckAndResize(
     uint64_t buckets_to_fill, HashTableCtx* __restrict__ ht_ctx, bool* got_memory) {
   uint64_t shift = 0;
@@ -546,12 +545,11 @@ Status HashTable::CheckAndResize(
          (num_buckets_ << shift) * MAX_FILL_FACTOR) {
     ++shift;
   }
-  if (shift > 0) return ResizeBuckets<MATCH>(num_buckets_ << shift, ht_ctx, got_memory);
+  if (shift > 0) return ResizeBuckets(num_buckets_ << shift, ht_ctx, got_memory);
   *got_memory = true;
   return Status::OK();
 }
 
-template<bool MATCH>
 Status HashTable::ResizeBuckets(
     int64_t num_buckets, HashTableCtx* __restrict__ ht_ctx, bool* got_memory) {
   DCHECK_EQ((num_buckets & (num_buckets - 1)), 0)
@@ -603,7 +601,7 @@ Status HashTable::ResizeBuckets(
     uint32_t hash = hash_array_[iter.bucket_idx_];
     bool found = false;
     BucketData bd;
-    int64_t bucket_idx = Probe<true, false, MATCH>(
+    int64_t bucket_idx = Probe<true, false, false>(
         new_buckets, new_hash_array, num_buckets, ht_ctx, hash, &found, &bd);
     DCHECK(!found);
     DCHECK_NE(bucket_idx, Iterator::BUCKET_NOT_FOUND) << " Probe failed even though "
