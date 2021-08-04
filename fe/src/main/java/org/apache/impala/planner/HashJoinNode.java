@@ -247,7 +247,7 @@ public class HashJoinNode extends JoinNode {
       // the memory of the hash table‘s structure
       perBuildInstanceDataBytes = (long) Math.ceil(rhsCard * getChild(1).getAvgRowSize() +
           BitUtil.roundUpToPowerOf2((long) Math.ceil(3 * rhsCard / 2)) *
-          PlannerContext.SIZE_OF_BUCKET);
+          (PlannerContext.SIZE_OF_BUCKET + PlannerContext.SIZE_OF_HASH));
       if (rhsNdv > 1 && rhsNdv < rhsCard) {
         perBuildInstanceDataBytes += (rhsCard - rhsNdv) *
             PlannerContext.SIZE_OF_DUPLICATENODE;

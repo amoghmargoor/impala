@@ -775,13 +775,6 @@ class HashTable {
     TaggedBucketData bd;
   };
 
-  /// Internal function for 'FindBuildRowBucket'
-  /// 'MATCH' will be false if Buckets of the HashTable cannot have matched flag set,
-  /// like in cases of Grouping Aggregates.
-  template <bool MATCH = true>
-  Iterator IR_ALWAYS_INLINE FindBuildRowBucketInternal(
-      HashTableCtx* __restrict__ ht_ctx, bool* found, BucketData* bucket_data);
-
   static_assert(BitUtil::IsPowerOf2(sizeof(Bucket) && sizeof(Bucket) == 8),
       "We assume that Hash-table bucket directories are a power-of-two (8 bytes "
       "currently) sizes because allocating only bucket directories with power-of-two "
@@ -864,21 +857,11 @@ class HashTable {
   /// match was not present, return an iterator pointing to the empty bucket where the key
   /// should be inserted. Returns End() if the table is full. The caller can set the data
   /// in the bucket using a Set*() method on the iterator.
+  /// 'MATCH' is set true if Buckets of HashTable can have matched flag set.
   /// Thread-safe for read-only hash tables.
+  template <bool MATCH = true>
   Iterator IR_ALWAYS_INLINE FindBuildRowBucket(
-      HashTableCtx* __restrict__ ht_ctx, bool* found) {
-      BucketData bd;
-      return FindBuildRowBucketInternal(ht_ctx, found, &bd);
-  }
-  /// Same as 'FindBuildRowBucket' but it is for Buckets storing Tuple pointer and if
-  /// Bucket is found its tuple data will be assigned to 'tuple'.
-  Iterator IR_ALWAYS_INLINE FindBuildRowTuple(HashTableCtx* __restrict__ ht_ctx,
-    bool* found, Tuple** tuple) {
-      BucketData bd;
-      Iterator it = FindBuildRowBucketInternal(ht_ctx, found, &bd);
-      *row = bd.htdata.tuple;
-      return it;
-  }
+      HashTableCtx* __restrict__ ht_ctx, bool* found);
 
   /// Find slot for 'hash' from 0 to 'num_buckets'.
   int64_t getBucketId(uint32_t hash, int64_t num_buckets);
