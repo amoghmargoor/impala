@@ -713,7 +713,7 @@ class HashTable {
         SetData(reinterpret_cast<uintptr_t>(data));
       }
     }
-    template <const bool TAGGED>
+    template <bool TAGGED>
     ALWAYS_INLINE BucketData GetBucketData() {
       if (TAGGED) {
         uint8_t* ptr = GetPtr();
@@ -739,7 +739,7 @@ class HashTable {
   ///    is used.
   struct Bucket {
     /// Either the data for this bucket or the linked list of duplicates.
-    template <const bool TAGGED = true>
+    template <bool TAGGED = true>
     ALWAYS_INLINE BucketData GetBucketData() { return bd.GetBucketData<TAGGED>(); }
     /// Whether this bucket contains a vaild entry, or it is empty.
     ALWAYS_INLINE bool IsFilled() { return bd.IsFilled(); }
@@ -753,13 +753,13 @@ class HashTable {
     ALWAYS_INLINE void SetMatched() { bd.SetMatched(); }
     ALWAYS_INLINE void SetHasDuplicates() { bd.SetHasDuplicates(); }
     // Setting Data or Duplicate Node
-    template <const bool TAGGED = true>
+    template <bool TAGGED = true>
     ALWAYS_INLINE void SetDuplicate(DuplicateNode* node) {
       bd.SetBucketData<DuplicateNode, TAGGED>(node);
     }
-    template <const bool TAGGED = true>
+    template <bool TAGGED = true>
     ALWAYS_INLINE void SetTuple(Tuple* tuple) { bd.SetBucketData<Tuple, TAGGED>(tuple); }
-    template <const bool TAGGED = true>
+    template <bool TAGGED = true>
     ALWAYS_INLINE void SetFlatRow(BufferedTupleStream::FlatRowPtr flat_row) {
       bd.SetBucketData<uint8_t, TAGGED>(flat_row);
     }
@@ -855,7 +855,7 @@ class HashTable {
   /// should be inserted. Returns End() if the table is full. The caller can set the data
   /// in the bucket using a Set*() method on the iterator.
   /// Thread-safe for read-only hash tables.
-  template <const bool MATCH = true>
+  template <bool MATCH = true>
   Iterator IR_ALWAYS_INLINE FindBuildRowBucket(
       HashTableCtx* __restrict__ ht_ctx, bool* found);
 
@@ -914,7 +914,7 @@ class HashTable {
   /// another error occurs, an error status may be returned.
   /// 'MATCH' is true if HashTable buckets can have matched flag set. For instance
   /// Grouping Aggregate would not need that.
-  template<const bool MATCH = true>
+  template<bool MATCH = true>
   Status CheckAndResize(uint64_t buckets_to_fill, HashTableCtx* __restrict__ ht_ctx,
       bool* got_memory) WARN_UNUSED_RESULT;
 
@@ -993,7 +993,7 @@ class HashTable {
     /// 'MATCH' is true when current node has 'IsMatched()' flag true.
     /// Thread-safe for read-only hash tables.
     TupleRow* IR_ALWAYS_INLINE GetRow() const;
-    template <const bool MATCH = true>
+    template <bool MATCH = true>
     Tuple* IR_ALWAYS_INLINE GetTuple() const;
 
     /// Set the current tuple for an empty bucket. Designed to be used with the iterator
@@ -1110,7 +1110,7 @@ class HashTable {
   /// Resize the hash table to 'num_buckets'. 'got_memory' is false on OOM.
   /// 'MATCH' is true if HashTable buckets can have matched flag set. For instance
   /// Grouping Aggregate would not need that.
-  template<const bool MATCH = true>
+  template<bool MATCH = true>
   Status ResizeBuckets(
       int64_t num_buckets, HashTableCtx* __restrict__ ht_ctx, bool* got_memory);
 
@@ -1135,18 +1135,6 @@ class HashTable {
   /// an insert. Sets all the fields of the bucket other than 'data'.
   void IR_ALWAYS_INLINE PrepareBucketForInsert(int64_t bucket_idx, uint32_t hash);
 
-  /// Resets the contents of the empty bucket with index 'bucket_idx' and also
-  /// sets tuple as bucket data.
-  void ALWAYS_INLINE InsertNewBucketTupleData(int64_t bucket_idx, uint32_t hash,
-    Tuple* data);
-
-  /// Can either prepare the bucket indexed by bucket_idx or do an additional step
-  /// of inserting data if template paramenter 'INSERT' is true. Used as utility
-  /// function for 'PrepareBucketForInsert' and 'InsertNewBucketTupleData'.
-  template<const bool INSERT>
-  void ALWAYS_INLINE InsertOrPrepareNewBucketData(int64_t bucket_idx, uint32_t hash,
-    uintptr_t data = 0);
-
   /// Return the TupleRow pointed by 'htdata'.
   TupleRow* GetRow(HtData& htdata, TupleRow* row) const;
 
@@ -1156,7 +1144,7 @@ class HashTable {
   /// 'MATCH' is set true if 'bucket' can have matched flag set i.e.,
   /// 'IsMatched()' returns true.
   /// They can either have duplicates or matched buckets.
-  template <const bool MATCH = true>
+  template <bool MATCH = true>
   TupleRow* GetRow(Bucket* bucket, TupleRow* row, BucketData* bd) const;
 
   /// Grow the node array. Returns true and sets 'status' to OK on success. Returns false

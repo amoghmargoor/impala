@@ -538,7 +538,7 @@ void HashTable::StatsCountersAdd(HashTableStatsProfile* profile) {
   COUNTER_ADD(profile->num_hash_resizes_, num_resizes_);
 }
 
-template<const bool MATCH>
+template<bool MATCH>
 Status HashTable::CheckAndResize(
     uint64_t buckets_to_fill, HashTableCtx* __restrict__ ht_ctx, bool* got_memory) {
   uint64_t shift = 0;
@@ -551,7 +551,7 @@ Status HashTable::CheckAndResize(
   return Status::OK();
 }
 
-template<const bool MATCH>
+template<bool MATCH>
 Status HashTable::ResizeBuckets(
     int64_t num_buckets, HashTableCtx* __restrict__ ht_ctx, bool* got_memory) {
   DCHECK_EQ((num_buckets & (num_buckets - 1)), 0)
