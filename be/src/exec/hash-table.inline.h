@@ -322,8 +322,8 @@ inline Tuple* IR_ALWAYS_INLINE HashTable::Iterator::GetTuple() const {
 inline void HashTable::Iterator::SetTuple(Tuple* tuple, uint32_t hash) {
   DCHECK(!AtEnd());
   DCHECK(table_->stores_tuples());
-  table_->PrepareBucketForInsert(bucket_idx_, hash, tuple);
-  table_->buckets_[bucket_idx].SetTuple<false>(tuple);
+  table_->PrepareBucketForInsert(bucket_idx_, hash);
+  table_->buckets_[bucket_idx_].SetTuple<false>(tuple);
 }
 
 inline void HashTable::Iterator::SetMatched() {
