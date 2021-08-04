@@ -178,7 +178,6 @@ inline HashTable::Iterator HashTable::FindBuildRowBucket(
   if (stores_duplicates() && LIKELY(bucket_idx != Iterator::BUCKET_NOT_FOUND)) {
     duplicates = bd.duplicates;
   }
-  *row = bd.htdata.tuple;
   return Iterator(this, ht_ctx->scratch_row(), bucket_idx, duplicates);
 }
 
