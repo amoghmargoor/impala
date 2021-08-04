@@ -855,9 +855,9 @@ class HashTable {
   /// should be inserted. Returns End() if the table is full. The caller can set the data
   /// in the bucket using a Set*() method on the iterator.
   /// Thread-safe for read-only hash tables.
-  template<const bool TAGGED = false>
+  template <const bool MATCH = true>
   Iterator IR_ALWAYS_INLINE FindBuildRowBucket(
-      HashTableCtx* __restrict__ ht_ctx, bool* found, Tuple** tuple = nullptr);
+      HashTableCtx* __restrict__ ht_ctx, bool* found);
 
   /// Find slot for 'hash' from 0 to 'num_buckets'.
   int64_t getBucketId(uint32_t hash, int64_t num_buckets);
@@ -912,6 +912,9 @@ class HashTable {
   /// inserted without need to resize. If there is not enough memory available to
   /// resize the hash table, Status::OK() is returned and 'got_memory' is false. If a
   /// another error occurs, an error status may be returned.
+  /// 'MATCH' is true if HashTable buckets can have matched flag set. For instance
+  /// Grouping Aggregate would not need that.
+  template<const bool MATCH = true>
   Status CheckAndResize(uint64_t buckets_to_fill, HashTableCtx* __restrict__ ht_ctx,
       bool* got_memory) WARN_UNUSED_RESULT;
 
@@ -987,10 +990,10 @@ class HashTable {
     /// Return the current row or tuple. Callers must check the iterator is not AtEnd()
     /// before calling them.  The returned row is owned by the iterator and valid until
     /// the next call to GetRow(). It is safe to advance the iterator.
-    /// 'TAGGED' is true when Bucket can be 'IsDuplicate()' or 'IsMatched()'
+    /// 'MATCH' is true when current node has 'IsMatched()' flag true.
     /// Thread-safe for read-only hash tables.
     TupleRow* IR_ALWAYS_INLINE GetRow() const;
-    template <const bool TAGGED = true>
+    template <const bool MATCH = true>
     Tuple* IR_ALWAYS_INLINE GetTuple() const;
 
     /// Set the current tuple for an empty bucket. Designed to be used with the iterator
@@ -1078,11 +1081,14 @@ class HashTable {
   /// 'INCLUSIVE_EQUALITY' is true if NULLs and NaNs should always be
   /// considered equal when comparing two rows.
   ///
+  /// 'MATCH' is false if none of 'buckets' has matched (IsMatched) flag set. For
+  /// instance in the case of Grouping Aggregate it would be false.
+  ///
   /// 'hash' is the hash computed by EvalAndHashBuild() or EvalAndHashProbe().
   /// 'found' indicates that a bucket that contains an equal row is found.
   ///
   /// There are wrappers of this function that perform the Find and Insert logic.
-  template <bool INCLUSIVE_EQUALITY, bool COMPARE_ROW, bool TAGGED = true>
+  template <bool INCLUSIVE_EQUALITY, bool COMPARE_ROW, bool MATCH = true>
   int64_t IR_ALWAYS_INLINE Probe(Bucket* buckets, uint32_t* hash_array,
       int64_t num_buckets, HashTableCtx* __restrict__ ht_ctx, uint32_t hash,
       bool* found, BucketData* bd);
@@ -1102,6 +1108,9 @@ class HashTable {
   void NextFilledBucket(int64_t* bucket_idx, DuplicateNode** node);
 
   /// Resize the hash table to 'num_buckets'. 'got_memory' is false on OOM.
+  /// 'MATCH' is true if HashTable buckets can have matched flag set. For instance
+  /// Grouping Aggregate would not need that.
+  template<const bool MATCH = true>
   Status ResizeBuckets(
       int64_t num_buckets, HashTableCtx* __restrict__ ht_ctx, bool* got_memory);
 
@@ -1144,9 +1153,10 @@ class HashTable {
   /// Returns the TupleRow of the pointed 'bucket'. In case of duplicates, it
   /// returns the content of the first chained duplicate node of the bucket.
   /// It also fills 'bd' with the BucketData of 'bucket'.
-  /// Template Parameter TAGGED is denote if bucket can be tagged i.e., 
+  /// 'MATCH' is set true if 'bucket' can have matched flag set i.e.,
+  /// 'IsMatched()' returns true.
   /// They can either have duplicates or matched buckets.
-  template <const bool TAGGED = true>
+  template <const bool MATCH = true>
   TupleRow* GetRow(Bucket* bucket, TupleRow* row, BucketData* bd) const;
 
   /// Grow the node array. Returns true and sets 'status' to OK on success. Returns false

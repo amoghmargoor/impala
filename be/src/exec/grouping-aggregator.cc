@@ -496,7 +496,7 @@ Status GroupingAggregator::AddBatchStreaming(
         SCOPED_TIMER(ht_resize_timer_);
         bool resized;
         RETURN_IF_ERROR(
-            ht->CheckAndResize(child_batch->num_rows(), ht_ctx_.get(), &resized));
+            ht->CheckAndResize<false>(child_batch->num_rows(), ht_ctx_.get(), &resized));
         if (resized) {
           remaining_capacity[i] = ht->NumInsertsBeforeResize();
         }
@@ -776,7 +776,7 @@ Status GroupingAggregator::CheckAndResizeHashPartitions(
       {
         SCOPED_TIMER(ht_resize_timer_);
         bool resized;
-        RETURN_IF_ERROR(partition->hash_tbl->CheckAndResize(num_rows, ht_ctx, &resized));
+        RETURN_IF_ERROR(partition->hash_tbl->CheckAndResize<false>(num_rows, ht_ctx, &resized));
         if (resized) break;
       }
       RETURN_IF_ERROR(SpillPartition(partitioning_aggregated_rows));
