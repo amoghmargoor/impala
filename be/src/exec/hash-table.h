@@ -707,11 +707,8 @@ class HashTable {
     ALWAYS_INLINE void SetHasDuplicates() { SetTagBit1(); }
     template <class T, const bool TAGGED>
     ALWAYS_INLINE void SetBucketData(T* data) { 
-      if (TAGGED) {
-        SetPtr(reinterpret_cast<uint8*>(data));
-      } else {
+      (TAGGED)? SetPtr(reinterpret_cast<uint8*>(data)) :
         SetData(reinterpret_cast<uintptr_t>(data));
-      }
     }
     template <bool TAGGED>
     ALWAYS_INLINE BucketData GetBucketData() {
@@ -720,9 +717,18 @@ class HashTable {
         return *(reinterpret_cast<BucketData*>(&ptr));
       } else {
         // If data is not tagged read it directly
-        uint8_t* ptr = reinterpret_cast<uint8_t*>(GetData());
-        return *(reinterpret_cast<BucketData*>(&ptr));
+        return reinterpret_cast<BucketData>(GetData());
       }
+    }
+    template <bool TAGGED>
+    ALWAYS_INLINE Tuple* GetTuple() {
+      return (TAGGED) ? reinterpret_cast<Tuple*>(GetPtr()) :
+        reinterpret_cast<Tuple*>(GetData());
+    }
+    template <bool TAGGED>
+    ALWAYS_INLINE DuplicateNode* GetDuplicate() {
+      return (TAGGED) ? reinterpret_cast<DuplicateNode*>(GetPtr()) :
+        reinterpret_cast<DuplicateNode*>(GetData());
     }
     ALWAYS_INLINE void PrepareBucketForInsert() { SetData(0); }
     TaggedBucketData & operator=(const TaggedBucketData & bd) = default;
@@ -741,6 +747,12 @@ class HashTable {
     /// Either the data for this bucket or the linked list of duplicates.
     template <bool TAGGED = true>
     ALWAYS_INLINE BucketData GetBucketData() { return bd.GetBucketData<TAGGED>(); }
+    /// Get Tuple
+    template <bool TAGGED = true>
+    ALWAYS_INLINE Tuple* GetTuple() { return bd.GetTuple<TAGGED>(); }
+    /// Get Duplicate Node
+    template <bool TAGGED = true>
+    ALWAYS_INLINE DuplicateNode* GetDuplicate() { return bd.GetDuplicate<TAGGED>(); }
     /// Whether this bucket contains a vaild entry, or it is empty.
     ALWAYS_INLINE bool IsFilled() { return bd.IsFilled(); }
     /// Indicates whether the row in the bucket has been matched.
@@ -854,6 +866,7 @@ class HashTable {
   /// match was not present, return an iterator pointing to the empty bucket where the key
   /// should be inserted. Returns End() if the table is full. The caller can set the data
   /// in the bucket using a Set*() method on the iterator.
+  /// 'MATCH' is set true if Buckets of HashTable can have matched flag set.
   /// Thread-safe for read-only hash tables.
   template <bool MATCH = true>
   Iterator IR_ALWAYS_INLINE FindBuildRowBucket(

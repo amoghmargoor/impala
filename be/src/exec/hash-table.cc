@@ -661,7 +661,7 @@ string HashTable::DebugString(bool skip_empty, bool show_match,
       }
     }
     if (buckets_[i].HasDuplicates()) {
-      DuplicateNode* node = buckets_[i].GetBucketData().duplicates;
+      DuplicateNode* node = buckets_[i].GetDuplicate();
       bool first = true;
       ss << " [D] ";
       while (node != NULL) {

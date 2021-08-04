@@ -121,7 +121,7 @@ inline bool HashTable::Insert(HashTableCtx* __restrict__ ht_ctx,
   if (UNLIKELY(bucket == NULL)) return false;
   // If successful insert, update the contents of the newly inserted entry with 'idx'.
   if (bucket->HasDuplicates()) {
-    DuplicateNode* node = bucket->GetBucketData().duplicates;
+    DuplicateNode* node = bucket->GetDuplicate();
     if (UNLIKELY(node == NULL)) return false;
     if (stores_tuples()) {
       node->htdata.tuple = row->GetTuple(0);
@@ -260,7 +260,7 @@ inline HashTable::DuplicateNode* HashTable::InsertDuplicateNode(
     ++num_buckets_with_duplicates_;
   }
   // Link a new node and UnsetMatched
-  next_node_->SetNextUnMatched(bucket->GetBucketData().duplicates);
+  next_node_->SetNextUnMatched(bucket->GetDuplicate());
   return AppendNextNode(bucket);
 }
 
@@ -315,7 +315,7 @@ inline Tuple* IR_ALWAYS_INLINE HashTable::Iterator::GetTuple() const {
     DCHECK(node_ != NULL);
     return node_->htdata.tuple;
   } else {
-    return bucket->GetBucketData<MATCH>().htdata.tuple;
+    return bucket->GetTuple<MATCH>();
   }
 }
 
