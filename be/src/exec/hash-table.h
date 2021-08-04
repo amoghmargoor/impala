@@ -740,7 +740,7 @@ class HashTable {
   struct Bucket {
     /// Either the data for this bucket or the linked list of duplicates.
     template <const bool TAGGED = true>
-    ALWAYS_INLINE BucketData GetBucketData() { return bd.bucket_data<TAGGED>(); }
+    ALWAYS_INLINE BucketData GetBucketData() { return bd.GetBucketData<TAGGED>(); }
     /// Whether this bucket contains a vaild entry, or it is empty.
     ALWAYS_INLINE bool IsFilled() { return bd.IsFilled(); }
     /// Indicates whether the row in the bucket has been matched.

@@ -228,28 +228,6 @@ inline void HashTable::PrepareBucketForInsert(int64_t bucket_idx, uint32_t hash)
   hash_array_[bucket_idx] = hash;
 }
 
-inline void HashTable::InsertNewBucketTupleData(int64_t bucket_idx, uint32_t hash,
-  Tuple* data) {
-  InsertOrPrepareNewBucketData<true>(bucket_idx, hash,
-    reinterpret_cast<uintptr_t>(data));
-}
-
-template<const bool INSERT>
-inline void HashTable::InsertOrPrepareNewBucketData(int64_t bucket_idx, uint32_t hash,
-  uintptr_t data) {
-  DCHECK_GE(bucket_idx, 0);
-  DCHECK_LT(bucket_idx, num_buckets_);
-  Bucket* bucket = &buckets_[bucket_idx];
-  DCHECK(!bucket->IsFilled());
-  ++num_filled_buckets_;
-  if (INSERT) {
-    bucket->InsertNewBucketData(data);
-  } else {
-    bucket->PrepareBucketForInsert();
-  }
-  hash_array_[bucket_idx] = hash;
-}
-
 inline HashTable::DuplicateNode* HashTable::AppendNextNode(Bucket* bucket) {
   DCHECK_GT(node_remaining_current_page_, 0);
   bucket->SetDuplicate(next_node_);
@@ -303,12 +281,12 @@ inline TupleRow* IR_ALWAYS_INLINE HashTable::GetRow(
     Bucket* bucket, TupleRow* row, BucketData* bucket_data) const {
   DCHECK(bucket != NULL);
   if (UNLIKELY(stores_duplicates() && bucket->HasDuplicates())) {
-    *bucket_data = bucket->bucket_data();
+    *bucket_data = bucket->GetBucketData();
     DuplicateNode* duplicate = bucket_data->duplicates;
     DCHECK(duplicate != NULL);
     return GetRow(duplicate->htdata, row);
   } else {
-    *bucket_data = bucket->bucket_data<MATCH>();
+    *bucket_data = bucket->GetBucketData<MATCH>();
     return GetRow(bucket_data->htdata, row);
   }
 }
