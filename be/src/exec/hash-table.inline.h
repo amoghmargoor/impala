@@ -168,12 +168,11 @@ inline HashTable::Iterator HashTable::FindProbeRow(HashTableCtx* __restrict__ ht
 // TODO: support lazy evaluation like HashTable::Insert().
 template<bool MATCH>
 inline HashTable::Iterator HashTable::FindBuildRowBucket(
-    HashTableCtx* __restrict__ ht_ctx, bool* found) {
+    HashTableCtx* __restrict__ ht_ctx, bool* found, BucketData* bucket_data) {
   uint32_t hash = ht_ctx->expr_values_cache()->CurExprValuesHash();
-  BucketData bd;
   int64_t bucket_idx =
       Probe<true, true, MATCH>(buckets_, hash_array_, num_buckets_, ht_ctx, hash,
-        found, &bd);
+        found, bucket_data);
   DuplicateNode* duplicates = NULL;
   if (stores_duplicates() && LIKELY(bucket_idx != Iterator::BUCKET_NOT_FOUND)) {
     duplicates = bd.duplicates;
