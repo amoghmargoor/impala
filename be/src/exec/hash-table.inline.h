@@ -208,7 +208,7 @@ inline void HashTable::NextFilledBucket(int64_t* bucket_idx, DuplicateNode** nod
   for (; *bucket_idx < num_buckets_; ++*bucket_idx) {
     if (buckets_[*bucket_idx].IsFilled()) {
       *node = stores_duplicates() ?
-        buckets_[*bucket_idx].GetBucketData().duplicates
+        buckets_[*bucket_idx].GetDuplicate()
         : NULL;
       return;
     }

@@ -711,24 +711,12 @@ class HashTable {
         SetData(reinterpret_cast<uintptr_t>(data));
     }
     template <bool TAGGED>
-    ALWAYS_INLINE BucketData GetBucketData() {
-      if (TAGGED) {
-        uint8_t* ptr = GetPtr();
-        return *(reinterpret_cast<BucketData*>(&ptr));
-      } else {
-        // If data is not tagged read it directly
-        return reinterpret_cast<BucketData>(GetData());
-      }
-    }
-    template <bool TAGGED>
     ALWAYS_INLINE Tuple* GetTuple() {
       return (TAGGED) ? reinterpret_cast<Tuple*>(GetPtr()) :
         reinterpret_cast<Tuple*>(GetData());
     }
-    template <bool TAGGED>
     ALWAYS_INLINE DuplicateNode* GetDuplicate() {
-      return (TAGGED) ? reinterpret_cast<DuplicateNode*>(GetPtr()) :
-        reinterpret_cast<DuplicateNode*>(GetData());
+      return reinterpret_cast<DuplicateNode*>(GetPtr());
     }
     ALWAYS_INLINE void PrepareBucketForInsert() { SetData(0); }
     TaggedBucketData & operator=(const TaggedBucketData & bd) = default;
@@ -744,15 +732,18 @@ class HashTable {
   /// 2. Bucket is attributted as packed with alignment of 4 to ensure no padding
   ///    is used.
   struct Bucket {
-    /// Either the data for this bucket or the linked list of duplicates.
+    /// Return the BucketData
     template <bool TAGGED = true>
-    ALWAYS_INLINE BucketData GetBucketData() { return bd.GetBucketData<TAGGED>(); }
+    ALWAYS_INLINE BucketData GetBucketData() {
+      BucketData bucket_data;
+      bucket_data.htdata.tuple = bd.GetTuple<TAGGED>();
+      return bucket_data;
+    }
     /// Get Tuple
     template <bool TAGGED = true>
     ALWAYS_INLINE Tuple* GetTuple() { return bd.GetTuple<TAGGED>(); }
     /// Get Duplicate Node
-    template <bool TAGGED = true>
-    ALWAYS_INLINE DuplicateNode* GetDuplicate() { return bd.GetDuplicate<TAGGED>(); }
+    ALWAYS_INLINE DuplicateNode* GetDuplicate() { return bd.GetDuplicate(); }
     /// Whether this bucket contains a vaild entry, or it is empty.
     ALWAYS_INLINE bool IsFilled() { return bd.IsFilled(); }
     /// Indicates whether the row in the bucket has been matched.

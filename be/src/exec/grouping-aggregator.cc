@@ -409,7 +409,7 @@ void GroupingAggregator::CleanupHashTbl(
     }
   } else {
     while (!it.AtEnd()) {
-      Tuple* tuple = it.GetTuple();
+      Tuple* tuple = it.GetTuple<false>();
       AggFnEvaluator::Serialize(agg_fn_evals, tuple);
       it.Next();
       // Free any expr result allocations to prevent them accumulating excessively.
