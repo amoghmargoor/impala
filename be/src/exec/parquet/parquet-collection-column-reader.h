@@ -75,6 +75,19 @@ class CollectionColumnReader : public ParquetColumnReader {
 
   virtual void Close(RowBatch* row_batch) override;
 
+  /// Skips the number of encoded values specified by 'num_rows', without materilizing or
+  /// decoding them.
+  /// Returns true on success, false otherwise.
+  virtual bool SkipRows(int64_t num_rows, int64_t skip_row_id) override;
+
+  virtual bool SetRowGroupAtEnd() override {
+    DCHECK(!children_.empty());
+    for (int c = 0; c < children_.size(); ++c) {
+      if (!children_[c]->SetRowGroupAtEnd()) return false;
+    }
+    return true;
+  }
+
  private:
   /// Column readers of fields contained within this collection. There is at least one
   /// child reader per collection reader. Child readers either materialize slots in the

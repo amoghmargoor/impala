@@ -549,6 +549,10 @@ struct TQueryOptions {
 
   // Indicates whether to use ORC's search argument to push down predicates.
   136: optional bool orc_read_statistics = true;
+
+  // Number of minimum consecutive rows when filtered out, will avoid materialization
+  // of columns in parquet
+  137: optional i32 parquet_materialization_threshold = 20;
 }
 
 // Impala currently has three types of sessions: Beeswax, HiveServer2 and external

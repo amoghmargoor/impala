@@ -113,18 +113,59 @@ class ParquetColumnChunkReader {
       ScopedBuffer* uncompressed_buffer, uint8_t** dict_values,
       int64_t* data_size, int* num_entries);
 
-  /// Reads the next data page to '*data' and '*data_size'.
+  /// Reads the next data page to '*data' and '*data_size', if READ_DATA_PAGE is true.
+  /// Else reads page header only, following which client should either call
+  /// 'ReadDataPageData' or 'SkipPageData'.
   /// Skips other types of pages (except for dictionary) until it finds a data page. If it
   /// finds a dictionary page, returns an error as the dictionary page should be the first
   /// page and this method should only be called if a data page is expected.
   /// If the stream reaches the end before reading a complete page header, '*eos' is set
   /// to true.
-  Status ReadNextDataPage(bool* eos, uint8_t** data, int* data_size);
+  template <bool READ_DATA_PAGE = true>
+  Status ReadNextDataPage(bool* eos, uint8_t** data, int* data_size) {
+    // Read the next data page, skipping page types we don't care about. This method
+    // should be called after we know that the first page is not a dictionary page.
+    // Therefore, if we find a dictionary page, it is an error in the parquet file
+    // and we return a non-ok status (returned by page_reader_.ReadPageHeader()).
+    bool next_data_page_found = false;
+    while (!next_data_page_found) {
+      RETURN_IF_ERROR(page_reader_.ReadPageHeader(eos));
+
+      const parquet::PageHeader current_page_header = CurrentPageHeader();
+      DCHECK(page_reader_.PageHeadersRead() > 0
+          || !current_page_header.__isset.dictionary_page_header)
+          << "Should not call this method on the first page if it is a dictionary.";
+
+      if (*eos) return Status::OK();
+
+      if (current_page_header.type == parquet::PageType::DATA_PAGE) {
+        next_data_page_found = true;
+      } else {
+        // We can safely skip non-data pages
+        RETURN_IF_ERROR(SkipPageData());
+      }
+    }
+    if (READ_DATA_PAGE) {
+      return ReadDataPageData(data, data_size);
+    } else {
+      return Status::OK();
+    }
+  }
 
   /// If the column type is a variable length string, transfers the remaining resources
   /// backing tuples to 'mem_pool' and frees up other resources. Otherwise frees all
   /// resources.
   void ReleaseResourcesOfLastPage(MemPool& mem_pool);
+
+  /// Skips the data part of the page. The header must be already read.
+  Status SkipPageData();
+
+  /// Reads the data part of the next data page. Sets '*data' to point to the buffer and
+  /// '*data_size' to its size.
+  /// If the column type is a variable length string, the buffer is allocated from
+  /// data_page_pool_. Otherwise the returned buffer will be valid only until the next
+  /// function call that advances the buffer.
+  Status ReadDataPageData(uint8_t** data, int* data_size);
 
  private:
   HdfsParquetScanner* parent_;
@@ -150,16 +191,6 @@ class ParquetColumnChunkReader {
   /// See TryReadDictionaryPage() for information about the parameters.
   Status ReadDictionaryData(ScopedBuffer* uncompressed_buffer, uint8_t** dict_values,
       int64_t* data_size, int* num_entries);
-
-  /// Reads the data part of the next data page. Sets '*data' to point to the buffer and
-  /// '*data_size' to its size.
-  /// If the column type is a variable length string, the buffer is allocated from
-  /// data_page_pool_. Otherwise the returned buffer will be valid only until the next
-  /// function call that advances the buffer.
-  Status ReadDataPageData(uint8_t** data, int* data_size);
-
-  /// Skips the data part of the page. The header must be already read.
-  Status SkipPageData();
 
   /// Allocate memory for the uncompressed contents of a data page of 'size' bytes from
   /// 'data_page_pool_'. 'err_ctx' provides context for error messages. On success,

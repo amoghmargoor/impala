@@ -24,6 +24,7 @@
 #include "exec/parquet/parquet-common.h"
 #include "exec/parquet/parquet-metadata-utils.h"
 #include "exec/parquet/parquet-page-index.h"
+#include "exec/scratch-tuple-batch.h"
 #include "runtime/bufferpool/buffer-pool.h"
 #include "util/runtime-profile-counters.h"
 
@@ -427,6 +428,10 @@ class HdfsParquetScanner : public HdfsColumnarScanner {
 
   /// Column reader for each top-level materialized slot in the output tuple.
   std::vector<ParquetColumnReader*> column_readers_;
+  /// Column readers among 'column_readers_' used for filtering
+  std::vector<ParquetColumnReader*> filter_readers_;
+  /// Column readers among 'column_readers_' not used for filtering
+  std::vector<ParquetColumnReader*> non_filter_readers_;
 
   /// File metadata thrift object
   parquet::FileMetaData file_metadata_;
@@ -550,6 +555,17 @@ class HdfsParquetScanner : public HdfsColumnarScanner {
   int64_t coll_items_read_counter_;
 
   ParquetPageIndex page_index_;
+
+  /// Defines materialization threshold for column readers. While materializing values
+  /// and putting them into scratch_batch_, we try to avoid materializing values that
+  /// were filtered out already. Threshold defines minimum number of contiguous rows
+  /// that has to be filtered out to skip materializing them.
+  int32_t materialization_threshold_;
+
+  /// In late Materializing, we try to materialize only the portition of a batch that
+  /// survive after filtering and call it micro batch. This represents a micro batch
+  /// that spans entire batch of length 'scratch_batch_->capacity'.
+  ScratchMicroBatch complete_micro_batch_;
 
   const char* filename() const { return metadata_range_->file(); }
 
@@ -716,7 +732,12 @@ class HdfsParquetScanner : public HdfsColumnarScanner {
   /// of this query should be terminated immediately.
   /// May set *skip_row_group to indicate that the current row group should be skipped,
   /// e.g., due to a parse error, but execution should continue.
-  Status AssembleRows(const std::vector<ParquetColumnReader*>& column_readers,
+  template <bool USE_PAGE_INDEX>
+  Status AssembleRows(RowBatch* row_batch, bool* skip_row_group) WARN_UNUSED_RESULT;
+
+  /// Check 'AssembleRows' for details.
+  /// 'AssembleRows' implements late materialization whereas this function does not.
+  Status AssembleRowsInternal(const vector<ParquetColumnReader*>& column_readers,
       RowBatch* row_batch, bool* skip_row_group) WARN_UNUSED_RESULT;
 
   /// Commit num_rows to the given row batch.
@@ -898,6 +919,39 @@ class HdfsParquetScanner : public HdfsColumnarScanner {
   /// Updates the counter parquet_uncompressed_page_size_counter_ with the given
   /// uncompressed page size. Called by ParquetColumnReader for each page read.
   void UpdateUncompressedPageSizeCounter(int64_t uncompressed_page_size);
+
+  /// Fetch the SlotIds used in the conjuncts
+  vector<SlotId> GetSlotIdsForConjuncts(const vector<ScalarExpr*>& conjuncts) const;
+
+  /// Fill 'micro_batches' with the data read by 'column_readers'.
+  /// Micro batches are sub ranges in 0..num_tuples-1 which needs to be read.
+  /// Tuple memory to write to is specified by 'scratch_batch->tuple_mem'.
+  Status FillScratchMicroBatches(const vector<ParquetColumnReader*>& column_readers,
+      RowBatch* row_batch, bool* skip_row_group, const ScratchMicroBatch* micro_batches,
+      int num_micro_batches, int max_num_tuples, int& num_tuples);
+
+  /// Creates ranges of microbatches that needs to be scanned.
+  /// Bits set in 'selected_rows' are the rows that needs to be scanned. Consecutive
+  /// bits set are used to create ranges. Ranges that differ by less than 'skip_length',
+  /// are merged together. E.g., for ranges 1-8, 11-20, 35-100 derived from
+  /// 'selected_rows' and 'skip_length' as 10, first two ranges would be merged into
+  /// 1-20 as they differ by 3 (11 - 8) which is less than 10 ('skip_length').
+  /// Precondition for the function is there is atleast one microbatch present i.e.,
+  /// atleast one of the selected_rows is true.
+  int ConvertToRange(
+      const bool* selected_rows, ScratchMicroBatch* batches, int skip_length);
+
+  /// Partition 'column_readers' into filter and non-filter readers. All 'filter_readers'
+  /// are the readers reading columns involved in either static filter or runtime filter.
+  void DivideFilterAndNonFilterColumnReaders(
+      const vector<ParquetColumnReader*>& column_readers,
+      vector<ParquetColumnReader*>* filter_readers,
+      vector<ParquetColumnReader*>* non_filter_readers) const;
+
+  /// Skip 'num_rows_to_skip' for all 'column_readers'. If Page filtering is enabled
+  /// then we skip to row index 'skip_to_row'.
+  Status SkipRowsForColumns(const vector<ParquetColumnReader*>& column_readers,
+      int64_t& num_rows_to_skip, int64_t& skip_to_row);
 };
 
 } // namespace impala

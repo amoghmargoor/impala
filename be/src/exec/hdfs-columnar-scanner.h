@@ -49,25 +49,30 @@ class HdfsColumnarScanner : public HdfsScanner {
   /// top-level tuples. See AssembleRows() in the derived classes.
   boost::scoped_ptr<ScratchTupleBatch> scratch_batch_;
 
-  typedef int (*ProcessScratchBatchFn)(HdfsColumnarScanner*, RowBatch*);
+  typedef int (*ProcessScratchBatchFn)(HdfsColumnarScanner*, RowBatch*, bool*);
   /// The codegen'd version of ProcessScratchBatch() if available, NULL otherwise.
   /// Function type: ProcessScratchBatchFn
   const CodegenFnPtrBase* codegend_process_scratch_batch_fn_ = nullptr;
+
+  /// Filters out tuples from 'scratch_batch_' and adds the surviving tuples
+  /// to the given batch. Finalizing transfer of batch is not done here.
+  /// Returns the number of rows that should be committed to the given batch.
+  int FilterScratchBatch(RowBatch* row_batch, bool* selected_rows);
 
   /// Evaluates runtime filters and conjuncts (if any) against the tuples in
   /// 'scratch_batch_', and adds the surviving tuples to the given batch.
   /// Transfers the ownership of tuple memory to the target batch when the
   /// scratch batch is exhausted.
   /// Returns the number of rows that should be committed to the given batch.
-  int TransferScratchTuples(RowBatch* row_batch);
+  int TransferScratchTuples(RowBatch* row_batch, bool* selected_rows);
 
   /// Processes a single row batch for TransferScratchTuples, looping over scratch_batch_
   /// until it is exhausted or the output is full. Called for the case when there are
   /// materialized tuples. This is a separate function so it can be codegened.
-  int ProcessScratchBatch(RowBatch* dst_batch);
+  int ProcessScratchBatch(RowBatch* dst_batch, bool* selected_rows);
 
  private:
-  int ProcessScratchBatchCodegenOrInterpret(RowBatch* dst_batch);
+  int ProcessScratchBatchCodegenOrInterpret(RowBatch* dst_batch, bool* selected_rows);
 };
 
 }

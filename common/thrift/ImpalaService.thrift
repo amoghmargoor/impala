@@ -696,6 +696,10 @@ enum TImpalaQueryOptions {
 
   // Indicates whether to use ORC's search argument to push down predicates.
   ORC_READ_STATISTICS = 135
+
+  // Number of minimum consecutive rows when filtered out, will avoid materilization
+  // of columns in parquet
+  PARQUET_MATERIALIZATION_THRESHOLD = 136;
 }
 
 // The summary of a DML statement.
