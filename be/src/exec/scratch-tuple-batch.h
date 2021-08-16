@@ -163,6 +163,11 @@ struct ScratchTupleBatch {
     return tuple_mem_pool.total_allocated_bytes() + aux_mem_pool.total_allocated_bytes();
   }
 };
+struct ScratchMicroBatch {
+  int start;
+  int end;
+  int length;
+};
 }
 
 #endif

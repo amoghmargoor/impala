@@ -163,6 +163,16 @@ class ParquetColumnReader {
   /// and frees up other resources. If 'row_batch' is NULL frees all resources instead.
   virtual void Close(RowBatch* row_batch) = 0;
 
+  /// Skips the number of encoded values specified by 'num_rows', without materilizing or
+  /// decoding them across pages.
+  /// It invokes 'SkipToLevelRows' for all 'children_'.
+  /// Returns true on success, false otherwise.
+  virtual bool SkipRows(int64_t num_rows) = 0;
+
+  /// Sets to row group end. 'rep_level_' and 'def_level_' is set to
+  /// ParquetLevel::ROW_GROUP_END. ParquetLevel::INVALID_LEVEL
+  virtual bool SetRowGroupAtEnd() = 0;
+
  protected:
   HdfsParquetScanner* parent_;
   const SchemaNode& node_;
@@ -466,16 +476,41 @@ class BaseScalarColumnReader : public ParquetColumnReader {
   /// Creates sub-ranges if page filtering is active.
   void CreateSubRanges(std::vector<io::ScanRange::SubRange>* sub_ranges);
 
-  /// Calculates how many encoded values we need to skip in the page data, then
-  /// invokes SkipEncodedValuesInPage(). The number of the encoded values depends on the
-  /// nesting of the data, and also on the number of null values.
+  /// Calculates how many encoded values we need to skip in the page data,
+  /// then invokes SkipEncodedValuesInPage(). It can skip values across multiple
+  /// pages too when template parameter MULTI_PAGE is true. The number of the encoded
+  /// values depends on the nesting of the data, and also on the number of null values.
   /// E.g. if 'num_rows' is 10, and every row contains an array of 10 integers, then
   /// we need to skip 100 encoded values in the page data.
   /// And, if 'num_rows' is 10, and every second value is NULL, then we only need to skip
   /// 5 values in the page data since NULL values are not stored there.
   /// The number of primitive values can be calculated from the def and rep levels.
   /// Returns true on success, false otherwise.
+  template <bool MULTI_PAGE = false>
   bool SkipTopLevelRows(int64_t num_rows);
+
+  /// Wrapper around 'SkipTopLevelRows' to skip across multiple pages.
+  virtual bool SkipRows(int64_t num_rows) override {
+    return SkipTopLevelRows<true>(num_rows);
+  }
+
+  virtual bool SetRowGroupAtEnd() override {
+    if (RowGroupAtEnd()) {
+      return true;
+    }
+    if (num_buffered_values_ == 0) {
+      NextPage();
+    }
+    if (DoesPageFiltering() && RowsRemainingInCandidateRange() == 0) {
+      if (max_rep_level() == 0 || rep_levels_.PeekLevel() == 0) {
+        if (!IsLastCandidateRange()) AdvanceCandidateRange();
+        if (!PageHasRemainingCandidateRows()) {
+          JumpToNextPage();
+        }
+      }
+    }
+    return parent_->parse_status_.ok() && RowGroupAtEnd();
+  }
 
   /// Skip values in the page data. Returns true on success, false otherwise.
   virtual bool SkipEncodedValuesInPage(int64_t num_values) = 0;

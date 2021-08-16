@@ -22,7 +22,7 @@
 
 namespace impala {
 
-int HdfsColumnarScanner::ProcessScratchBatch(RowBatch* dst_batch) {
+int HdfsColumnarScanner::ProcessScratchBatch(RowBatch* dst_batch, bool* selected_rows) {
   DCHECK(scratch_batch_ != nullptr);
   ScalarExprEvaluator* const* conjunct_evals = conjunct_evals_->data();
   const int num_conjuncts = conjunct_evals_->size();
@@ -43,19 +43,23 @@ int HdfsColumnarScanner::ProcessScratchBatch(RowBatch* dst_batch) {
   // Loop until the scratch batch is exhausted or the output batch is full.
   // Do not use batch_->AtCapacity() in this loop because it is not necessary
   // to perform the memory capacity check.
+  int i = 0;
   while (scratch_tuple != scratch_tuple_end) {
     *output_row = reinterpret_cast<Tuple*>(scratch_tuple);
     scratch_tuple += tuple_size;
     // Evaluate runtime filters and conjuncts. Short-circuit the evaluation if
     // the filters/conjuncts are empty to avoid function calls.
     if (!EvalRuntimeFilters(reinterpret_cast<TupleRow*>(output_row))) {
+      selected_rows[i++] = false;
       continue;
     }
     if (!ExecNode::EvalConjuncts(conjunct_evals, num_conjuncts,
         reinterpret_cast<TupleRow*>(output_row))) {
+      selected_rows[i++] = false;
       continue;
     }
     // Row survived runtime filters and conjuncts.
+    selected_rows[i++] = true;
     ++output_row;
     if (output_row == output_row_end) break;
   }
