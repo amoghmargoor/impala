@@ -19,6 +19,7 @@
 #ifndef IMPALA_EXEC_HDFS_PARQUET_SCANNER_H
 #define IMPALA_EXEC_HDFS_PARQUET_SCANNER_H
 
+#include "exec/scratch-tuple-batch.h"
 #include "exec/hdfs-columnar-scanner.h"
 #include "exec/parquet/parquet-column-stats.h"
 #include "exec/parquet/parquet-common.h"
@@ -26,6 +27,7 @@
 #include "exec/parquet/parquet-page-index.h"
 #include "runtime/bufferpool/buffer-pool.h"
 #include "util/runtime-profile-counters.h"
+#include <bitset>
 
 namespace impala {
 
@@ -427,6 +429,10 @@ class HdfsParquetScanner : public HdfsColumnarScanner {
 
   /// Column reader for each top-level materialized slot in the output tuple.
   std::vector<ParquetColumnReader*> column_readers_;
+  /// Column readers among 'column_readers_' used for filtering
+  std::vector<ParquetColumnReader*> filter_readers_;
+  /// Column readers among 'column_readers_' not used for filtering
+  std::vector<ParquetColumnReader*> non_filter_readers_;
 
   /// File metadata thrift object
   parquet::FileMetaData file_metadata_;
@@ -717,6 +723,8 @@ class HdfsParquetScanner : public HdfsColumnarScanner {
   /// May set *skip_row_group to indicate that the current row group should be skipped,
   /// e.g., due to a parse error, but execution should continue.
   Status AssembleRows(const std::vector<ParquetColumnReader*>& column_readers,
+      const vector<ParquetColumnReader*>& filter_readers,
+      const vector<ParquetColumnReader*>& non_filter_readers,
       RowBatch* row_batch, bool* skip_row_group) WARN_UNUSED_RESULT;
 
   /// Commit num_rows to the given row batch.
@@ -898,6 +906,35 @@ class HdfsParquetScanner : public HdfsColumnarScanner {
   /// Updates the counter parquet_uncompressed_page_size_counter_ with the given
   /// uncompressed page size. Called by ParquetColumnReader for each page read.
   void UpdateUncompressedPageSizeCounter(int64_t uncompressed_page_size);
+
+  /// Fetch the SlotIds used in the conjuncts
+
+  vector<SlotId> GetSlotIdsForConjuncts(vector<ScalarExpr*> conjuncts);
+
+  /// Fill Scratch Batch with the data read by 'column_readers'. Tuple memory to write to
+  /// is specified by 'tuple_mem'. 
+  Status FillScratchBatch(const vector<ParquetColumnReader*>& column_readers,
+    RowBatch* row_batch,
+    bool* skip_row_group,
+    uint8_t* tuple_mem,
+    const ScratchMicroBatch* micro_batches,
+    int num_micro_batches);
+
+  /// Creates ranges of microbatches that needs to be scanned.
+  /// Bits set in 'selected_rows' are the rows that needs to be scanned. Consecutive
+  /// bits set are used to create ranges. Ranges that differ by less than 'skip_length',
+  /// are merged together. E.g., for ranges 1-8, 11-20, 35-100 derived from
+  /// 'selected_rows' and 'skip_length' as 10, fisrt two ranges would be merged into
+  /// 1-20 as they differ by 3 (11 - 8) which is less than 10 ('skip_length').
+  int ConvertToRange(const std::bitset<1024>& selected_rows,
+    ScratchMicroBatch* batches, int skip_length);
+
+  /// Partition 'column_readers' into filter and non-filter readers. All 'filter_readers'
+  /// are the readers reading columns involved in either static filter or runtime filter.
+  void DivideFilterAndNonFilterColumnReaders(
+    vector<ParquetColumnReader*>& column_readers,
+    vector<ParquetColumnReader*>& filter_readers,
+    vector<ParquetColumnReader*>& non_filter_readers);
 };
 
 } // namespace impala

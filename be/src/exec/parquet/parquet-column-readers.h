@@ -163,6 +163,10 @@ class ParquetColumnReader {
   /// and frees up other resources. If 'row_batch' is NULL frees all resources instead.
   virtual void Close(RowBatch* row_batch) = 0;
 
+  /// Skips the number of encoded values specified by 'num_rows' 
+  /// Returns true on success, false otherwise.
+  virtual bool SkipTopLevelRows(int64_t num_rows) = 0;
+
  protected:
   HdfsParquetScanner* parent_;
   const SchemaNode& node_;
@@ -475,7 +479,7 @@ class BaseScalarColumnReader : public ParquetColumnReader {
   /// 5 values in the page data since NULL values are not stored there.
   /// The number of primitive values can be calculated from the def and rep levels.
   /// Returns true on success, false otherwise.
-  bool SkipTopLevelRows(int64_t num_rows);
+  virtual bool SkipTopLevelRows(int64_t num_rows) override;
 
   /// Skip values in the page data. Returns true on success, false otherwise.
   virtual bool SkipEncodedValuesInPage(int64_t num_values) = 0;

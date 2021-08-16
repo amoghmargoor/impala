@@ -63,7 +63,6 @@ bool CollectionColumnReader::ReadNonRepeatedValue(MemPool* pool, Tuple* tuple) {
 
 bool CollectionColumnReader::ReadValueBatch(MemPool* pool, int max_values,
     int tuple_size, uint8_t* tuple_mem, int* num_values) {
-  // The below loop requires that NextLevels() was called previously to populate
   // 'def_level_' and 'rep_level_'. Ensure it is called at the start of each
   // row group.
   if (def_level_ == ParquetLevel::INVALID_LEVEL && !NextLevels()) return false;
@@ -156,5 +155,14 @@ void CollectionColumnReader::UpdateDerivedState() {
     // the current collection is the first item in a new parent collection).
     pos_current_value_ = 0;
   }
+}
+
+bool CollectionColumnReader::SkipTopLevelRows(int64_t num_rows) {
+  DCHECK(!children_.empty());
+  for (int c = 0; c < children_.size(); ++c) {
+    if (!children_[c]->SkipTopLevelRows(num_rows)) return false;
+  }
+  UpdateDerivedState();
+  return true;
 }
 } // namespace impala

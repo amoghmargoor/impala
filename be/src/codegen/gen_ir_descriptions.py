@@ -162,7 +162,7 @@ ir_functions = [
   ["HDFS_SCANNER_WRITE_ALIGNED_TUPLES",
    "_ZN6impala11HdfsScanner18WriteAlignedTuplesEPNS_7MemPoolEPNS_8TupleRowEPNS_13FieldLocationEiiiib"],
   ["PROCESS_SCRATCH_BATCH",
-   "_ZN6impala19HdfsColumnarScanner19ProcessScratchBatchEPNS_8RowBatchE"],
+   "_ZN6impala19HdfsColumnarScanner19ProcessScratchBatchEPNS_8RowBatchERSt6bitsetILm1024EE"],
   ["HDFS_SCANNER_EVAL_RUNTIME_FILTER",
    "_ZN6impala11HdfsScanner17EvalRuntimeFilterEiPNS_8TupleRowE"],
   ["HDFS_SCANNER_TEXT_CONVERTER_WRITE_SLOT_INTERPRETED_IR",

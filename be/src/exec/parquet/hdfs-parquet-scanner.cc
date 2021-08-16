@@ -226,6 +226,8 @@ Status HdfsParquetScanner::Open(ScannerContext* context) {
   // We've processed the metadata and there are columns that need to be materialized.
   RETURN_IF_ERROR(CreateColumnReaders(
       *scan_node_->tuple_desc(), *schema_resolver_, &column_readers_));
+  DivideFilterAndNonFilterColumnReaders(column_readers_, filter_readers_,
+    non_filter_readers_);
   COUNTER_SET(num_cols_counter_,
       static_cast<int64_t>(CountScalarColumns(column_readers_)));
   // Set top-level template tuple.
@@ -236,6 +238,37 @@ Status HdfsParquetScanner::Open(ScannerContext* context) {
     RETURN_IF_ERROR(CreateColIdx2EqConjunctMap());
   }
   return Status::OK();
+}
+
+void HdfsParquetScanner::DivideFilterAndNonFilterColumnReaders(
+  vector<ParquetColumnReader*>& column_readers,
+  vector<ParquetColumnReader*>& filter_readers,
+  vector<ParquetColumnReader*>& non_filter_readers) {
+  vector<ScalarExpr*> conjuncts;
+  conjuncts.insert(std::end(conjuncts), std::begin(scan_node_->conjuncts()),
+    std::end(scan_node_->conjuncts()));
+  conjuncts.insert(std::end(conjuncts), std::begin(scan_node_->filter_exprs()),
+    std::end(scan_node_->filter_exprs()));
+  auto conjunct_slot_ids = GetSlotIdsForConjuncts(conjuncts);
+  unordered_set<SlotId> slot_ids;
+  slot_ids.insert(std::begin(conjunct_slot_ids), std::end(conjunct_slot_ids));
+  for (int column_idx = 0; column_idx < column_readers.size(); column_idx++) {
+    ParquetColumnReader* column_reader = column_readers[column_idx];
+    if (slot_ids.find(column_reader->slot_desc()->id()) != slot_ids.end()) {
+      filter_readers.push_back(column_reader);
+    } else {
+      non_filter_readers.push_back(column_reader);
+    }
+  }
+}
+
+vector<SlotId> HdfsParquetScanner::GetSlotIdsForConjuncts(
+  vector<ScalarExpr*> conjuncts) {
+  vector<SlotId> slot_ids;
+  for (int conjunct_idx = 0; conjunct_idx < conjuncts.size(); ++conjunct_idx) {
+    conjuncts[conjunct_idx]->GetSlotIds(&slot_ids);
+  }
+  return slot_ids;
 }
 
 void HdfsParquetScanner::Close(RowBatch* row_batch) {
@@ -450,7 +483,8 @@ Status HdfsParquetScanner::GetNextInternal(RowBatch* row_batch) {
   // Transfer remaining tuples from the scratch batch.
   if (!scratch_batch_->AtEnd()) {
     assemble_rows_timer_.Start();
-    int num_row_to_commit = TransferScratchTuples(row_batch);
+    std::bitset<1024> selected_rows;
+    int num_row_to_commit = TransferScratchTuples(row_batch, selected_rows);
     assemble_rows_timer_.Stop();
     RETURN_IF_ERROR(CommitRows(row_batch, num_row_to_commit));
     if (row_batch->AtCapacity()) return Status::OK();
@@ -484,7 +518,8 @@ Status HdfsParquetScanner::GetNextInternal(RowBatch* row_batch) {
     return Status::OK();
   }
   assemble_rows_timer_.Start();
-  Status status = AssembleRows(column_readers_, row_batch, &advance_row_group_);
+  Status status = AssembleRows(column_readers_, filter_readers_, non_filter_readers_,
+    row_batch, &advance_row_group_);
   assemble_rows_timer_.Stop();
   RETURN_IF_ERROR(status);
   if (!parse_status_.ok()) {
@@ -2093,7 +2128,10 @@ Status HdfsParquetScanner::ProcessBloomFilter(const parquet::RowGroup&
 /// difficult to maintain a maximum memory footprint without throwing away at least
 /// some work. This point needs further experimentation and thought.
 Status HdfsParquetScanner::AssembleRows(
-    const vector<ParquetColumnReader*>& column_readers, RowBatch* row_batch,
+    const vector<ParquetColumnReader*>& column_readers,
+    const vector<ParquetColumnReader*>& filter_readers,
+    const vector<ParquetColumnReader*>& non_filter_readers,
+    RowBatch* row_batch,
     bool* skip_row_group) {
   DCHECK(!column_readers.empty());
   DCHECK(row_batch != nullptr);
@@ -2106,19 +2144,131 @@ Status HdfsParquetScanner::AssembleRows(
     RETURN_IF_ERROR(scratch_batch_->Reset(state_));
     InitTupleBuffer(template_tuple_, scratch_batch_->tuple_mem, scratch_batch_->capacity);
 
-    // Materialize the top-level slots into the scratch batch column-by-column.
+    // Check if filter_readers exist
+    if (filter_readers.empty() || non_filter_readers.empty()) {
+      // Old logic
+      ScratchMicroBatch batches[1];
+      batches[0].start = 0;
+      batches[0].end = scratch_batch_->capacity - 1;
+      batches[0].length = scratch_batch_->capacity;
+      Status fill_status = FillScratchBatch(column_readers, row_batch, skip_row_group,
+        scratch_batch_->tuple_mem, batches, 1);
+      if (!fill_status.ok()) {
+        return fill_status; 
+      }
+      RETURN_IF_ERROR(CheckPageFiltering());
+      num_rows_read += scratch_batch_->num_tuples;
+      std::bitset<1024> selected_rows;
+      int num_row_to_commit = TransferScratchTuples(row_batch, selected_rows);
+      RETURN_IF_ERROR(CommitRows(row_batch, num_row_to_commit));
+      if (row_batch->AtCapacity()) break;
+    } else {
+      // New Logic
+      ScratchMicroBatch batches[1];
+      batches[0].start = 0;
+      batches[0].end = scratch_batch_->capacity - 1;
+      batches[0].length = scratch_batch_->capacity;
+      Status fill_status = FillScratchBatch(filter_readers, row_batch, skip_row_group,
+        scratch_batch_->tuple_mem, batches, 1);
+      if (!fill_status.ok()) {
+        return fill_status;
+      }
+      
+      std::bitset<1024> selected_rows;
+      int num_row_to_commit = TransferScratchTuples(row_batch, selected_rows);
+      if (num_row_to_commit == 0) {
+        // all of the rows are filtered out
+        // skip reading for rest of the non-filter column readers now.
+        for (int c = 0; c < non_filter_readers.size(); ++c) {
+          ParquetColumnReader* col_reader = non_filter_readers[c];
+          col_reader->SkipTopLevelRows(num_rows_read);
+        }
+      } else {
+        Tuple* output_row_start = row_batch->GetRow(row_batch->num_rows())->GetTuple(0);
+        ScratchMicroBatch micro_batches[scratch_batch_->capacity];
+        int num_micro_batches = ConvertToRange(selected_rows, micro_batches, 10);
+        Status fill_status = FillScratchBatch(non_filter_readers, row_batch, skip_row_group,
+          reinterpret_cast<uint8_t*>(output_row_start), micro_batches, num_micro_batches);
+        if (!fill_status.ok()) {
+          return fill_status;
+        }
+      }
+        RETURN_IF_ERROR(CheckPageFiltering());
+        num_rows_read += scratch_batch_->num_tuples;
+        RETURN_IF_ERROR(CommitRows(row_batch, num_row_to_commit));
+        if (row_batch->AtCapacity()) break;
+    }
+  }
+  row_group_rows_read_ += num_rows_read;
+  COUNTER_ADD(scan_node_->rows_read_counter(), num_rows_read);
+  // Merge Scanner-local counter into HdfsScanNode counter and reset.
+  COUNTER_ADD(scan_node_->collection_items_read_counter(), coll_items_read_counter_);
+  coll_items_read_counter_ = 0;
+  return Status::OK();
+}
+
+int HdfsParquetScanner::ConvertToRange(const std::bitset<1024>& selected_rows,
+  ScratchMicroBatch* batches, int skip_length) {
+  int range = 0;
+  int start = -1;
+  int last = -1;
+  const int batch_size = selected_rows.size();
+  for (size_t i = 0; i < batch_size; ++i) {
+    if (selected_rows[i]) {
+      if (start == -1) {
+        // start the first ever range
+        start = i;
+        last = i;
+      } else if (i - last < skip_length) {
+        // continue the old range as 'last' is within 'skip_length' of last range.
+        last = i;
+      } else {
+        // start a new range as 'last' is outside 'skip_length' of last range'
+        batches[range].start = start;
+        batches[range].end = last;
+        batches[range].length = last -start + 1;
+        range++;
+        start = i;
+        last = i;
+      }
+    }
+  }
+  // add last range
+  if (start != -1) {
+    batches[range].start = start;
+    batches[range].end = last;
+    batches[range].length = last -start + 1;
+    range++;
+  }
+  return range;
+}
+
+Status HdfsParquetScanner::FillScratchBatch(const vector<ParquetColumnReader*>& column_readers,
+    RowBatch* row_batch,
+    bool* skip_row_group,
+    uint8_t* tuple_mem,
+    const ScratchMicroBatch* micro_batches,
+    int num_micro_batches) {
+      // Materialize the top-level slots into the scratch batch column-by-column.
     int last_num_tuples = -1;
     for (int c = 0; c < column_readers.size(); ++c) {
       ParquetColumnReader* col_reader = column_readers[c];
       bool continue_execution;
-      if (col_reader->max_rep_level() > 0) {
-        continue_execution = col_reader->ReadValueBatch(&scratch_batch_->aux_mem_pool,
-            scratch_batch_->capacity, tuple_byte_size_, scratch_batch_->tuple_mem,
-            &scratch_batch_->num_tuples);
-      } else {
-        continue_execution = col_reader->ReadNonRepeatedValueBatch(
-            &scratch_batch_->aux_mem_pool, scratch_batch_->capacity, tuple_byte_size_,
-            scratch_batch_->tuple_mem, &scratch_batch_->num_tuples);
+      int last = -1;
+      for (int r = 0; r < num_micro_batches; r++) {
+        if (last != -1) {
+          col_reader->SkipTopLevelRows(micro_batches[r].start - last - 1);
+        }
+        if (col_reader->max_rep_level() > 0) {
+          continue_execution = col_reader->ReadValueBatch(&scratch_batch_->aux_mem_pool,
+              micro_batches[r].length, tuple_byte_size_, tuple_mem,
+              &scratch_batch_->num_tuples);
+        } else {
+          continue_execution = col_reader->ReadNonRepeatedValueBatch(
+              &scratch_batch_->aux_mem_pool, micro_batches[r].length, tuple_byte_size_,
+              tuple_mem, &scratch_batch_->num_tuples);
+        }
+        last = micro_batches[r].end;
       }
       // Check that all column readers populated the same number of values.
       bool num_tuples_mismatch = c != 0 && last_num_tuples != scratch_batch_->num_tuples;
@@ -2139,17 +2289,6 @@ Status HdfsParquetScanner::AssembleRows(
       }
       last_num_tuples = scratch_batch_->num_tuples;
     }
-    RETURN_IF_ERROR(CheckPageFiltering());
-    num_rows_read += scratch_batch_->num_tuples;
-    int num_row_to_commit = TransferScratchTuples(row_batch);
-    RETURN_IF_ERROR(CommitRows(row_batch, num_row_to_commit));
-    if (row_batch->AtCapacity()) break;
-  }
-  row_group_rows_read_ += num_rows_read;
-  COUNTER_ADD(scan_node_->rows_read_counter(), num_rows_read);
-  // Merge Scanner-local counter into HdfsScanNode counter and reset.
-  COUNTER_ADD(scan_node_->collection_items_read_counter(), coll_items_read_counter_);
-  coll_items_read_counter_ = 0;
   return Status::OK();
 }
 
@@ -2622,7 +2761,6 @@ Status HdfsParquetScanner::InitScalarColumns() {
     }
     RETURN_IF_ERROR(scalar_reader->Reset(*file_desc, col_chunk, row_group_idx_));
   }
-  RETURN_IF_ERROR(DivideReservationBetweenColumns(scalar_readers_));
   return Status::OK();
 }
 

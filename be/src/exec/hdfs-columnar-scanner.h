@@ -20,6 +20,7 @@
 #include "exec/hdfs-scanner.h"
 
 #include <boost/scoped_ptr.hpp>
+#include <bitset>
 
 namespace impala {
 
@@ -49,7 +50,7 @@ class HdfsColumnarScanner : public HdfsScanner {
   /// top-level tuples. See AssembleRows() in the derived classes.
   boost::scoped_ptr<ScratchTupleBatch> scratch_batch_;
 
-  typedef int (*ProcessScratchBatchFn)(HdfsColumnarScanner*, RowBatch*);
+  typedef int (*ProcessScratchBatchFn)(HdfsColumnarScanner*, RowBatch*, std::bitset<1024>&);
   /// The codegen'd version of ProcessScratchBatch() if available, NULL otherwise.
   /// Function type: ProcessScratchBatchFn
   const CodegenFnPtrBase* codegend_process_scratch_batch_fn_ = nullptr;
@@ -59,15 +60,15 @@ class HdfsColumnarScanner : public HdfsScanner {
   /// Transfers the ownership of tuple memory to the target batch when the
   /// scratch batch is exhausted.
   /// Returns the number of rows that should be committed to the given batch.
-  int TransferScratchTuples(RowBatch* row_batch);
+  int TransferScratchTuples(RowBatch* row_batch, std::bitset<1024>& selected_rows);
 
   /// Processes a single row batch for TransferScratchTuples, looping over scratch_batch_
   /// until it is exhausted or the output is full. Called for the case when there are
   /// materialized tuples. This is a separate function so it can be codegened.
-  int ProcessScratchBatch(RowBatch* dst_batch);
+  int ProcessScratchBatch(RowBatch* dst_batch, std::bitset<1024>& selected_rows);
 
  private:
-  int ProcessScratchBatchCodegenOrInterpret(RowBatch* dst_batch);
+  int ProcessScratchBatchCodegenOrInterpret(RowBatch* dst_batch, std::bitset<1024>& selected_rows);
 };
 
 }

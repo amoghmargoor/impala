@@ -75,6 +75,8 @@ class CollectionColumnReader : public ParquetColumnReader {
 
   virtual void Close(RowBatch* row_batch) override;
 
+  virtual bool SkipTopLevelRows(int64_t num_rows) override;
+
  private:
   /// Column readers of fields contained within this collection. There is at least one
   /// child reader per collection reader. Child readers either materialize slots in the
