@@ -140,7 +140,7 @@ string Benchmark::Measure(int max_time, int initial_batch_size,
   BenchmarkSetupFunction fn) {
   if (benchmarks_.empty()) return "";
 
-  if (fn != NULL) { fn(benchmarks_[0].args); }
+  if (fn != NULL) fn(benchmarks_[0].args);
 
   // Run a warmup to iterate through the data
   benchmarks_[0].fn(10, benchmarks_[0].args);
@@ -171,7 +171,7 @@ string Benchmark::Measure(int max_time, int initial_batch_size,
   try {
     for (int j = 0; j < NUM_REPS; ++j) {
       for (int i = 0; i < benchmarks_.size(); ++i) {
-        if (fn != NULL) { fn(benchmarks_[i].args); }
+        if (fn != NULL) fn(benchmarks_[i].args);
         benchmarks_[i].rates.push_back(
             Measure(benchmarks_[i].fn, benchmarks_[i].args, max_time, initial_batch_size,
               micro_heuristics_));

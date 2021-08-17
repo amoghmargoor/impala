@@ -650,15 +650,14 @@ class HashTable {
   struct DuplicateNode; // Forward Declaration
   class TaggedDuplicateNode : public TaggedPtr<DuplicateNode, false> {
    public:
-    ALWAYS_INLINE bool IsMatched() { return IsTagBitSet0(); }
-    ALWAYS_INLINE void SetMatched() { SetTagBit0(); }
+    ALWAYS_INLINE bool IsMatched() { return IsTagBitSet<0>(); }
+    ALWAYS_INLINE void SetMatched() { SetTagBit<0>(); }
     ALWAYS_INLINE void SetNode(DuplicateNode* node) { SetPtr(node); }
     // Set Node and UnsetMatched
     ALWAYS_INLINE void SetNodeUnMatched(DuplicateNode* node) {
       SetData(reinterpret_cast<uintptr_t>(node));
       DCHECK(!IsMatched());
     }
-    ~TaggedDuplicateNode() {}
   };
   /// struct DuplicateNode is referenced by SIZE_OF_DUPLICATENODE of
   /// planner/PlannerContext.java. If struct DuplicateNode is modified, please modify
@@ -686,25 +685,23 @@ class HashTable {
   };
 
   /// 'TaggedPtr' for 'BucketData'.
-  /// This doesn't own BucketData* so Allocation and Deallocation is not it's
-  /// resonsibility.
+  /// This doesn't own BucketData* so Allocation and Deallocation is not its
+  /// responsibility.
   /// Following fields are also folded in the TagggedPtr below:
-  /// 1. bool filled: (Tag bit 0) Whether this bucket contains a vaild entry, or
-  ///    it is empty.
-  /// 2. bool matched: (Tag bit 1) Used for full outer and right {outer, anti, semi}
+  /// 1. bool matched: (Tag bit 0) Used for full outer and right {outer, anti, semi}
   ///    joins. Indicates whether the row in the bucket has been matched.
   ///    From an abstraction point of view, this is an awkward place to store this
   ///    information but it is efficient. This space is otherwise unused.
-  /// 3. bool hasDuplicates: (Tag bit 2) Used in case of duplicates. If true, then
+  /// 2. bool hasDuplicates: (Tag bit 1) Used in case of duplicates. If true, then
   ///    the bucketData union should be used as 'duplicates'.
   class TaggedBucketData : public TaggedPtr<uint8, false> {
    public:
     TaggedBucketData() = default;
     ALWAYS_INLINE bool IsFilled() { return GetData() != 0; }
-    ALWAYS_INLINE bool IsMatched() { return IsTagBitSet0(); }
-    ALWAYS_INLINE bool HasDuplicates() { return IsTagBitSet1(); }
-    ALWAYS_INLINE void SetMatched() { SetTagBit0(); }
-    ALWAYS_INLINE void SetHasDuplicates() { SetTagBit1(); }
+    ALWAYS_INLINE bool IsMatched() { return IsTagBitSet<0>(); }
+    ALWAYS_INLINE bool HasDuplicates() { return IsTagBitSet<1>(); }
+    ALWAYS_INLINE void SetMatched() { SetTagBit<0>(); }
+    ALWAYS_INLINE void SetHasDuplicates() { SetTagBit<1>(); }
     template <class T, const bool TAGGED>
     ALWAYS_INLINE void SetBucketData(T* data) { 
       (TAGGED)? SetPtr(reinterpret_cast<uint8*>(data)) :
@@ -720,17 +717,13 @@ class HashTable {
     }
     ALWAYS_INLINE void PrepareBucketForInsert() { SetData(0); }
     TaggedBucketData & operator=(const TaggedBucketData & bd) = default;
-    ~TaggedBucketData() {}
   };
 
   /// struct Bucket is referenced by SIZE_OF_BUCKET of planner/PlannerContext.java.
   /// If struct Bucket is modified, please modify SIZE_OF_BUCKET synchronously.
-  /// Couple of optimizations done for space:
-  /// 1. TaggedPtr is used to store BucketData. 3 booleans are folded into
-  ///    TaggedPtr. Check comments for TaggedBucketData for details on booleans
-  ///    stored.
-  /// 2. Bucket is attributted as packed with alignment of 4 to ensure no padding
-  ///    is used.
+  /// TaggedPtr is used to store BucketData. 3 booleans are folded into
+  /// TaggedPtr. Check comments for TaggedBucketData for details on booleans
+  /// stored.
   struct Bucket {
     /// Return the BucketData
     template <bool TAGGED = true>
@@ -853,13 +846,19 @@ class HashTable {
   /// Thread-safe for read-only hash tables.
   Iterator IR_ALWAYS_INLINE FindProbeRow(HashTableCtx* __restrict__ ht_ctx);
 
+  /// Enum for the type of Bucket
+  enum BucketType: boolean {
+    MATCH_SET = true, // matched flag is not set for the bucket 
+    MATCH_UNSET = false // matched flag is not set for the bucket 
+  }
+
   /// If a match is found in the table, return an iterator as in FindProbeRow(). If a
   /// match was not present, return an iterator pointing to the empty bucket where the key
   /// should be inserted. Returns End() if the table is full. The caller can set the data
   /// in the bucket using a Set*() method on the iterator.
   /// 'MATCH' is set true if Buckets of HashTable can have matched flag set.
   /// Thread-safe for read-only hash tables.
-  template <bool MATCH = true>
+  template <BucketType TYPE = MATCH_SET>
   Iterator IR_ALWAYS_INLINE FindBuildRowBucket(
       HashTableCtx* __restrict__ ht_ctx, bool* found);
 
@@ -994,7 +993,7 @@ class HashTable {
     /// 'MATCH' is true when current node has 'IsMatched()' flag true.
     /// Thread-safe for read-only hash tables.
     TupleRow* IR_ALWAYS_INLINE GetRow() const;
-    template <bool MATCH = true>
+    template <BucketType TYPE = MATCH_SET>
     Tuple* IR_ALWAYS_INLINE GetTuple() const;
 
     /// Set the current tuple for an empty bucket. Designed to be used with the iterator
@@ -1089,7 +1088,7 @@ class HashTable {
   /// 'found' indicates that a bucket that contains an equal row is found.
   ///
   /// There are wrappers of this function that perform the Find and Insert logic.
-  template <bool INCLUSIVE_EQUALITY, bool COMPARE_ROW, bool MATCH = true>
+  template <bool INCLUSIVE_EQUALITY, bool COMPARE_ROW, BucketType TYPE = MATCH_SET>
   int64_t IR_ALWAYS_INLINE Probe(Bucket* buckets, uint32_t* hash_array,
       int64_t num_buckets, HashTableCtx* __restrict__ ht_ctx, uint32_t hash,
       bool* found, BucketData* bd);
@@ -1142,7 +1141,7 @@ class HashTable {
   /// 'MATCH' is set true if 'bucket' can have matched flag set i.e.,
   /// 'IsMatched()' returns true.
   /// They can either have duplicates or matched buckets.
-  template <bool MATCH = true>
+  template <BucketType TYPE = MATCH_SET>
   TupleRow* GetRow(Bucket* bucket, TupleRow* row, BucketData* bd) const;
 
   /// Grow the node array. Returns true and sets 'status' to OK on success. Returns false

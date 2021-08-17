@@ -24,7 +24,7 @@ namespace impala {
 class TaggedPtrTest {
  public:
   int id;
-  TaggedPtrTest(int i, std::string s) {
+  TaggedPtrTest(int i, const std::string& s) {
     id = i;
     str = s;
   }
@@ -39,8 +39,8 @@ class TaggedPtrTest {
   std::string str;
 };
 
-TaggedPtr<TaggedPtrTest> MakeTaggedPtr(int a1, std::string s1) {
-  return TaggedPtr<TaggedPtrTest>::make_tagptr(a1, s1);
+TaggedPtr<TaggedPtrTest> MakeTaggedPtr(int a, const std::string& s) {
+  return TaggedPtr<TaggedPtrTest>::make_tagptr(a, s);
 }
 
 union TestData {
@@ -58,17 +58,15 @@ union TestBucketData {
 
 class TaggedBucketData: public TaggedPtr<TestBucketData, false> {
  public:
-  bool IsData() { return IsTagBitSet0(); }
-  void SetIsData() { SetTagBit0(); }
-  void UnSetIsData() { UnSetTagBit0(); }
+  bool IsData() { return IsTagBitSet<0>(); }
+  void SetIsData() { SetTagBit<0>(); }
+  void UnsetIsData() { UnsetTagBit<0>(); }
   TestBucketData* GetData() {
     return GetPtr();
   }
   void SetBucketData(uintptr_t address) {
     SetPtr((TestBucketData *) address);
   }
-  // In destructor reset the pointer so that base contructor doesn't free it.
-  ~TaggedBucketData() {}
 };
 
 struct TestBucket {
@@ -88,18 +86,26 @@ TEST(TaggedPtrTest, Simple) {
   // Test initial tag
   EXPECT_EQ(ptr.GetTag(), 0);
 
-  // Set Tag and check
-  ptr.SetTagBit0();
-  ptr.SetTagBit1();
-  EXPECT_TRUE(ptr.IsTagBitSet0());
-  EXPECT_TRUE(ptr.IsTagBitSet1());
-  EXPECT_FALSE(ptr.IsTagBitSet2());
-  EXPECT_EQ(ptr.GetTag(), 96);
+  // Set/Unset all tag bits and Check
+  for (int i = 0; i < 7; i++) {
+    ptr.SetTagBit<i>();
+    EXPECT_TRUE(ptr.IsTagBitSet<i>());
+    ptr.UnsetTagBit<i>();
+    EXPECT_FALSE(ptr.IsTagBitSet<i>());
+  }
+
+  // Set few tag bits and check
+  ptr.SetTagBit<0>();
+  ptr.SetTagBit<1>();
+  EXPECT_TRUE(ptr.IsTagBitSet<0>());
+  EXPECT_TRUE(ptr.IsTagBitSet<1>());
+  EXPECT_FALSE(ptr.IsTagBitSet<2>());
+  EXPECT_EQ(ptr.GetTag(), 0X60);
 
   // Unset Tag
-  ptr.UnSetTagBit0();
-  EXPECT_FALSE(ptr.IsTagBitSet0());
-  EXPECT_EQ(ptr.GetTag(), 32);
+  ptr.UnsetTagBit<0>();
+  EXPECT_FALSE(ptr.IsTagBitSet<0>());
+  EXPECT_EQ(ptr.GetTag(), 0x20);
 
   // Move Semantics
   auto ptr_move1 = std::move(ptr);
@@ -115,10 +121,10 @@ TEST(TaggedPtrTest, Comparision) {
   auto ptr1 = MakeTaggedPtr(3, "test1");
   auto ptr2 = MakeTaggedPtr(3, "test2");
   auto ptr3 = MakeTaggedPtr(3, "test1");
-  ptr1.SetTagBit1();
-  ptr1.SetTagBit2();
-  ptr3.SetTagBit1();
-  ptr3.SetTagBit2();
+  ptr1.SetTagBit<1>();
+  ptr1.SetTagBit<2>();
+  ptr3.SetTagBit<1>();
+  ptr3.SetTagBit<2>();
   EXPECT_FALSE(ptr1 == ptr3);
   EXPECT_TRUE(ptr1 != ptr2);
   EXPECT_TRUE(*ptr1 == *ptr3);
@@ -128,20 +134,20 @@ TEST(TaggedPtrTest, Complex) {
   // Check if tag bits are retained on setting Data
   TestBucket tagTest;
   tagTest.bucketData.SetIsData();
-  tagTest.bucketData.SetTagBit1();
+  tagTest.bucketData.SetTagBit<1>();
   TestBucketData tag_bucket_data;
   tag_bucket_data.data.s = "TagTest";
   tagTest.bucketData.SetBucketData((uintptr_t) &tag_bucket_data);
   EXPECT_TRUE(tagTest.bucketData.IsData());
-  EXPECT_TRUE(tagTest.bucketData.IsTagBitSet1());
+  EXPECT_TRUE(tagTest.bucketData.IsTagBitSet<1>());
   EXPECT_EQ(tagTest.bucketData.GetData()->data.s, "TagTest");
   // set to null and check
   tagTest.bucketData.SetBucketData(0);
   EXPECT_TRUE(tagTest.bucketData.IsNull());
   EXPECT_TRUE(tagTest.bucketData.IsData());
-  EXPECT_TRUE(tagTest.bucketData.IsTagBitSet1());
+  EXPECT_TRUE(tagTest.bucketData.IsTagBitSet<1>());
 
-  // Creating two buckets bucket1 and bucket2 and linking bucket 2 to bucket1.
+  // Creating two buckets bucket1 and bucket2 and linking bucket2 to bucket1.
   TestBucket bucket1;
   bucket1.id = 1;
   TestBucketData bucket_data;

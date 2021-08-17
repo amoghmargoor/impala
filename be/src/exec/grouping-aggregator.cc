@@ -315,7 +315,7 @@ Status GroupingAggregator::GetRowsFromPartition(
 
     int row_idx = row_batch->AddRow();
     TupleRow* row = row_batch->GetRow(row_idx);
-    Tuple* intermediate_tuple = output_iterator_.GetTuple<false>();
+    Tuple* intermediate_tuple = output_iterator_.GetTuple<BucketType::MATCH_UNSET>();
     Tuple* output_tuple = GetOutputTuple(output_partition_->agg_fn_evals,
         intermediate_tuple, row_batch->tuple_data_pool());
     output_iterator_.Next();
@@ -401,7 +401,7 @@ void GroupingAggregator::CleanupHashTbl(
     Tuple* dummy_dst = nullptr;
     dummy_dst = Tuple::Create(output_tuple_desc_->byte_size(), tuple_pool_.get());
     while (!it.AtEnd()) {
-      Tuple* tuple = it.GetTuple<false>();
+      Tuple* tuple = it.GetTuple<BucketType::MATCH_UNSET>();
       AggFnEvaluator::Finalize(agg_fn_evals, tuple, dummy_dst);
       it.Next();
       // Free any expr result allocations to prevent them accumulating excessively.
@@ -409,7 +409,7 @@ void GroupingAggregator::CleanupHashTbl(
     }
   } else {
     while (!it.AtEnd()) {
-      Tuple* tuple = it.GetTuple<false>();
+      Tuple* tuple = it.GetTuple<BucketType::MATCH_UNSET>();
       AggFnEvaluator::Serialize(agg_fn_evals, tuple);
       it.Next();
       // Free any expr result allocations to prevent them accumulating excessively.

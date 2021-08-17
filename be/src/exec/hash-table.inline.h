@@ -47,7 +47,7 @@ inline void HashTableCtx::ExprValuesCache::NextRow() {
   DCHECK_LE(cur_expr_values_hash_ - expr_values_hash_array_.get(), capacity_);
 }
 
-template <bool INCLUSIVE_EQUALITY, bool COMPARE_ROW, bool MATCH>
+template <bool INCLUSIVE_EQUALITY, bool COMPARE_ROW, BucketType TYPE>
 inline int64_t HashTable::Probe(Bucket* buckets, uint32_t* hash_array,
     int64_t num_buckets, HashTableCtx* __restrict__ ht_ctx, uint32_t hash, bool* found,
     BucketData* bd) {
@@ -68,7 +68,7 @@ inline int64_t HashTable::Probe(Bucket* buckets, uint32_t* hash_array,
     if (hash == hash_array[bucket_idx]) {
       if (COMPARE_ROW
           && ht_ctx->Equals<INCLUSIVE_EQUALITY>(
-              GetRow<MATCH>(bucket, ht_ctx->scratch_row_, bd))) {
+              GetRow<TYPE>(bucket, ht_ctx->scratch_row_, bd))) {
         *found = true;
         return bucket_idx;
       }
@@ -166,13 +166,13 @@ inline HashTable::Iterator HashTable::FindProbeRow(HashTableCtx* __restrict__ ht
 
 
 // TODO: support lazy evaluation like HashTable::Insert().
-template<bool MATCH>
+template<bool TYPE>
 inline HashTable::Iterator HashTable::FindBuildRowBucket(
     HashTableCtx* __restrict__ ht_ctx, bool* found) {
   uint32_t hash = ht_ctx->expr_values_cache()->CurExprValuesHash();
   BucketData bd;
   int64_t bucket_idx =
-      Probe<true, true, MATCH>(buckets_, hash_array_, num_buckets_, ht_ctx, hash,
+      Probe<true, true, TYPE>(buckets_, hash_array_, num_buckets_, ht_ctx, hash,
         found, &bd);
   DuplicateNode* duplicates = NULL;
   if (stores_duplicates() && LIKELY(bucket_idx != Iterator::BUCKET_NOT_FOUND)) {
@@ -276,7 +276,7 @@ inline TupleRow* IR_ALWAYS_INLINE HashTable::GetRow(HtData& htdata, TupleRow* ro
   }
 }
 
-template <bool MATCH>
+template <BucketType TYPE>
 inline TupleRow* IR_ALWAYS_INLINE HashTable::GetRow(
     Bucket* bucket, TupleRow* row, BucketData* bucket_data) const {
   DCHECK(bucket != NULL);
@@ -286,7 +286,7 @@ inline TupleRow* IR_ALWAYS_INLINE HashTable::GetRow(
     DCHECK(duplicate != NULL);
     return GetRow(duplicate->htdata, row);
   } else {
-    *bucket_data = bucket->GetBucketData<MATCH>();
+    *bucket_data = bucket->GetBucketData<TYPE>();
     return GetRow(bucket_data->htdata, row);
   }
 }
@@ -305,7 +305,7 @@ inline TupleRow* IR_ALWAYS_INLINE HashTable::Iterator::GetRow() const {
   }
 }
 
-template <bool MATCH>
+template <BucketType TYPE>
 inline Tuple* IR_ALWAYS_INLINE HashTable::Iterator::GetTuple() const {
   DCHECK(!AtEnd());
   DCHECK(table_->stores_tuples());
@@ -315,7 +315,7 @@ inline Tuple* IR_ALWAYS_INLINE HashTable::Iterator::GetTuple() const {
     DCHECK(node_ != NULL);
     return node_->htdata.tuple;
   } else {
-    return bucket->GetTuple<MATCH>();
+    return bucket->GetTuple<TYPE>();
   }
 }
 

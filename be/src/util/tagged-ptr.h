@@ -42,32 +42,6 @@ namespace impala {
 /// allocation/deallocation of the object to which pointer stored points to should be
 /// the responsibility of client and not 'TaggedPtr'( check HashTable::TaggedBucketData).
 
-
-// Boiler Plate Code for Setting/Unsetting/Checking Tags
-#define SET_UNSET_IS_TAG(bit)                                               \
-  static const uintptr_t DATA_MASK_##bit = (1ULL << (63 - bit));          \
-  static const uintptr_t DATA_MASK_INVERSE_##bit = ~(1ULL << (63 - bit)); \
-  ALWAYS_INLINE void SetTagBit##bit() {                                     \
-    data_ = (data_ | DATA_MASK_##bit);                                      \
-  }                                                                         \
-                                                                            \
-  ALWAYS_INLINE void UnSetTagBit##bit() {                                   \
-    data_ = (data_ & DATA_MASK_INVERSE_##bit);                              \
-  }                                                                         \
-                                                                            \
-  ALWAYS_INLINE bool IsTagBitSet##bit() const {                             \
-    return (data_ & DATA_MASK_##bit);                               \
-  }
-
-#define SET_UNSET_IS_TAG_0_6 \
-SET_UNSET_IS_TAG(0)          \
-SET_UNSET_IS_TAG(1)          \
-SET_UNSET_IS_TAG(2)          \
-SET_UNSET_IS_TAG(3)          \
-SET_UNSET_IS_TAG(4)          \
-SET_UNSET_IS_TAG(5)          \
-SET_UNSET_IS_TAG(6)
-
 template<class T, bool OWNS=true> class TaggedPtr {
  public:
   TaggedPtr() = default;
@@ -96,18 +70,28 @@ template<class T, bool OWNS=true> class TaggedPtr {
     }
   }
 
-  // Member functions for Setting/Unsetting/Checking tags for 0-6
-  // E.g. for tag bit 0,
-  //   ALWAYS_INLINE void SetTagBit0() {
-  //     data_ = (data_ | DATA_MASK_0);
-  //   }
-  //   ALWAYS_INLINE void UnSetTagBit##bit() {
-  //     data_ = (data_ & DATA_MASK_INVERSE_##bit);
-  //   }
-  //   ALWAYS_INLINE bool IsTagBitSet##bit() const {
-  //     return (data_ & DATA_MASK_INVERSE_##bit);
-  //   }
-  SET_UNSET_IS_TAG_0_6
+  template <uint8_t bit>
+  static constexpr uintptr_t DATA_MASK = 1ULL << (63 - bit);
+ 
+  template <uint8_t bit>
+  static constexpr uintptr_t DATA_MASK_INVERSE = ~DATA_MASK<bit>;
+ 
+  template <uint8_t bit>
+  ALWAYS_INLINE void SetTagBit() {
+    DCHECK_IN_RANGE(bit, 0, 6) << "tag bit can only be from 0 to 6";
+    data_ = (data_ | DATA_MASK<bit>);
+  }
+  template <uint8_t bit>
+  ALWAYS_INLINE void UnsetTagBit() {
+    DCHECK_IN_RANGE(bit, 0, 6) << "tag bit can only be from 0 to 6";
+    data_ = (data_ & DATA_MASK_INVERSE<bit>);
+  }
+
+  template <uint8_t bit>
+  ALWAYS_INLINE bool IsTagBitSet() {
+    DCHECK_IN_RANGE(bit, 0, 6) << "tag bit can only be from 0 to 6";
+    return data_ & DATA_MASK<bit>;
+  }
 
   ALWAYS_INLINE bool IsNull() { return GetPtr() == 0; }
 
@@ -129,12 +113,13 @@ template<class T, bool OWNS=true> class TaggedPtr {
   TaggedPtr(T* ptr) { SetPtr(ptr); }
 
   uintptr_t data_ = 0;
-  static const uintptr_t MASK_56_BIT = (1ULL << 56);
-  static const uintptr_t MASK_0_56_BITS = (1ULL << 57) - 1;
+  static constexpr uintptr_t MASK_56_BIT = (1ULL << 56);
+  static constexpr uintptr_t MASK_0_56_BITS = (1ULL << 57) - 1;
+  static constexpr uintptr_t MASK_0_56_BITS_INVERSE = ~MASK_0_56_BITS;
  protected:
   // Don't use unless client wants to retain the ownership of pointer.
   ALWAYS_INLINE void SetPtr(T* ptr) {
-    data_ = (data_ & ~MASK_0_56_BITS) | (reinterpret_cast<uintptr_t>(ptr));
+    data_ = (data_ & ~MASK_0_56_BITS_INVERSE) | (reinterpret_cast<uintptr_t>(ptr));
   }
   ALWAYS_INLINE void SetData(uintptr_t data) { data_ = data; }
   ALWAYS_INLINE uintptr_t GetData() { return data_; }
