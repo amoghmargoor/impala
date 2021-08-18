@@ -17,6 +17,11 @@
 
 #pragma once
 
+#include <cstdint>
+#include <utility>
+#include "common/compiler-util.h"
+#include "common/logging.h"
+
 namespace impala {
 
 /// Most OS uses paging to translate linear address (address used by software) to actual
