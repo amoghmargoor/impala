@@ -68,7 +68,7 @@ inline int64_t HashTable::Probe(Bucket* buckets, uint32_t* hash_array,
     if (hash == hash_array[bucket_idx]) {
       if (COMPARE_ROW
           && ht_ctx->Equals<INCLUSIVE_EQUALITY>(
-              GetRow<TYPE>(bucket, ht_ctx->scratch_row_, bd))) {
+                 GetRow<TYPE>(bucket, ht_ctx->scratch_row_, bd))) {
         *found = true;
         return bucket_idx;
       }
@@ -164,16 +164,14 @@ inline HashTable::Iterator HashTable::FindProbeRow(HashTableCtx* __restrict__ ht
   return End();
 }
 
-
 // TODO: support lazy evaluation like HashTable::Insert().
-template<HashTable::BucketType TYPE>
+template <HashTable::BucketType TYPE>
 inline HashTable::Iterator HashTable::FindBuildRowBucket(
     HashTableCtx* __restrict__ ht_ctx, bool* found) {
   uint32_t hash = ht_ctx->expr_values_cache()->CurExprValuesHash();
   BucketData bd;
-  int64_t bucket_idx =
-      Probe<true, true, TYPE>(buckets_, hash_array_, num_buckets_, ht_ctx, hash,
-        found, &bd);
+  int64_t bucket_idx = Probe<true, true, TYPE>(
+      buckets_, hash_array_, num_buckets_, ht_ctx, hash, found, &bd);
   DuplicateNode* duplicates = NULL;
   if (stores_duplicates() && LIKELY(bucket_idx != Iterator::BUCKET_NOT_FOUND)) {
     duplicates = bd.duplicates;
@@ -207,9 +205,7 @@ inline void HashTable::NextFilledBucket(int64_t* bucket_idx, DuplicateNode** nod
   ++*bucket_idx;
   for (; *bucket_idx < num_buckets_; ++*bucket_idx) {
     if (buckets_[*bucket_idx].IsFilled()) {
-      *node = stores_duplicates() ?
-        buckets_[*bucket_idx].GetDuplicate()
-        : NULL;
+      *node = stores_duplicates() ? buckets_[*bucket_idx].GetDuplicate() : NULL;
       return;
     }
   }

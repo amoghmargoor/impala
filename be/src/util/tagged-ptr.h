@@ -42,7 +42,8 @@ namespace impala {
 /// allocation/deallocation of the object to which pointer stored points to should be
 /// the responsibility of client and not 'TaggedPtr'( check HashTable::TaggedBucketData).
 
-template<class T, bool OWNS=true> class TaggedPtr {
+template <class T, bool OWNS = true>
+class TaggedPtr {
  public:
   TaggedPtr() = default;
 
@@ -54,7 +55,7 @@ template<class T, bool OWNS=true> class TaggedPtr {
 
   // Define move constructor and move assignment
   TaggedPtr(TaggedPtr&& other) : data_(std::exchange(other.data_, 0)) {}
-  TaggedPtr<T, OWNS> &operator=(TaggedPtr<T, OWNS> &&other) noexcept {
+  TaggedPtr<T, OWNS>& operator=(TaggedPtr<T, OWNS>&& other) noexcept {
     if (this != &other) {
       data_ = std::exchange(other.data_, 0);
     }
@@ -72,10 +73,10 @@ template<class T, bool OWNS=true> class TaggedPtr {
 
   template <uint8_t bit>
   static constexpr uintptr_t DATA_MASK = 1ULL << (63 - bit);
- 
+
   template <uint8_t bit>
   static constexpr uintptr_t DATA_MASK_INVERSE = ~DATA_MASK<bit>;
- 
+
   template <uint8_t bit>
   ALWAYS_INLINE void SetTagBit() {
     DCHECK_IN_RANGE(bit, 0, 6);
@@ -97,17 +98,17 @@ template<class T, bool OWNS=true> class TaggedPtr {
 
   ALWAYS_INLINE int GetTag() const { return data_ >> 57; }
 
-  ALWAYS_INLINE T* GetPtr() const { return (T*) (data_ & MASK_0_56_BITS); }
+  ALWAYS_INLINE T* GetPtr() const { return (T*)(data_ & MASK_0_56_BITS); }
 
-  T& operator*() const noexcept { return *GetPtr();}
+  T& operator*() const noexcept { return *GetPtr(); }
 
   T* operator->() const noexcept { return GetPtr(); }
 
   bool operator!() const noexcept { return GetPtr() == 0; }
 
-  bool operator==(const TaggedPtr<T> &a) noexcept { return data_ == a.data_; }
+  bool operator==(const TaggedPtr<T>& a) noexcept { return data_ == a.data_; }
 
-  bool operator!=(const TaggedPtr<T> &a) noexcept { return data_ != a.data_; }
+  bool operator!=(const TaggedPtr<T>& a) noexcept { return data_ != a.data_; }
 
  private:
   TaggedPtr(T* ptr) { SetPtr(ptr); }
@@ -116,6 +117,7 @@ template<class T, bool OWNS=true> class TaggedPtr {
   static constexpr uintptr_t MASK_56_BIT = (1ULL << 56);
   static constexpr uintptr_t MASK_0_56_BITS = (1ULL << 57) - 1;
   static constexpr uintptr_t MASK_0_56_BITS_INVERSE = ~MASK_0_56_BITS;
+
  protected:
   // Don't use unless client wants to retain the ownership of pointer.
   ALWAYS_INLINE void SetPtr(T* ptr) {
@@ -125,7 +127,7 @@ template<class T, bool OWNS=true> class TaggedPtr {
   ALWAYS_INLINE uintptr_t GetData() { return data_; }
   // No copies allowed to ensure no leaking of ownership.
   // Derived classes can opt to enable it.
-  TaggedPtr(const TaggedPtr &) = default;
-  TaggedPtr &operator=(const TaggedPtr &) = default;
+  TaggedPtr(const TaggedPtr&) = default;
+  TaggedPtr& operator=(const TaggedPtr&) = default;
 };
-};
+}; // namespace impala

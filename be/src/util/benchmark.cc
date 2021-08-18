@@ -136,8 +136,8 @@ int Benchmark::AddBenchmark(const string& name, BenchmarkFunction fn, void* args
   return benchmarks_.size() - 1;
 }
 
-string Benchmark::Measure(int max_time, int initial_batch_size,
-  BenchmarkSetupFunction fn) {
+string Benchmark::Measure(
+    int max_time, int initial_batch_size, BenchmarkSetupFunction fn) {
   if (benchmarks_.empty()) return "";
 
   if (fn != NULL) fn(benchmarks_[0].args);

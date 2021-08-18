@@ -15,10 +15,10 @@
 // specific language governing permissions and limitations
 // under the License.
 
+#include "util/tagged-ptr.h"
 #include <string>
 #include <boost/preprocessor/repetition/repeat_from_to.hpp>
 #include "testutil/gtest-util.h"
-#include "util/tagged-ptr.h"
 
 namespace impala {
 
@@ -32,7 +32,7 @@ class TaggedPtrTest {
 
   std::string GetString() { return str; }
 
-  bool operator ==(const TaggedPtrTest& other) {
+  bool operator==(const TaggedPtrTest& other) {
     return id == other.id && str == other.str;
   }
 
@@ -47,7 +47,7 @@ TaggedPtr<TaggedPtrTest> MakeTaggedPtr(int a, const std::string& s) {
 union TestData {
   int x;
   float y;
-  const char * s;
+  const char* s;
 };
 
 struct TestBucket; // Forward Declaration.
@@ -57,17 +57,13 @@ union TestBucketData {
   TestBucket* next;
 };
 
-class TaggedBucketData: public TaggedPtr<TestBucketData, false> {
+class TaggedBucketData : public TaggedPtr<TestBucketData, false> {
  public:
   bool IsData() { return IsTagBitSet<0>(); }
   void SetIsData() { SetTagBit<0>(); }
   void UnsetIsData() { UnsetTagBit<0>(); }
-  TestBucketData* GetData() {
-    return GetPtr();
-  }
-  void SetBucketData(uintptr_t address) {
-    SetPtr((TestBucketData *) address);
-  }
+  TestBucketData* GetData() { return GetPtr(); }
+  void SetBucketData(uintptr_t address) { SetPtr((TestBucketData*)address); }
 };
 
 struct TestBucket {
@@ -87,16 +83,16 @@ TEST(TaggedPtrTest, Simple) {
   // Test initial tag
   EXPECT_EQ(ptr.GetTag(), 0);
 
-  // Set/Unset all tag bits and Check
-  #pragma push_macro("TEST_ALL_TAG_BITS")
-  #define TEST_ALL_TAG_BITS(ignore1, i, ignore2) \
+  // Set/Unset all tag bits and check
+#pragma push_macro("TEST_ALL_TAG_BITS")
+#define TEST_ALL_TAG_BITS(ignore1, i, ignore2) \
   ptr.SetTagBit<i>();                          \
-  EXPECT_TRUE(ptr.IsTagBitSet<i>());         \
-  ptr.UnsetTagBit<i>();                      \
-  EXPECT_FALSE(ptr.IsTagBitSet<i>());        \
+  EXPECT_TRUE(ptr.IsTagBitSet<i>());           \
+  ptr.UnsetTagBit<i>();                        \
+  EXPECT_FALSE(ptr.IsTagBitSet<i>());
 
   BOOST_PP_REPEAT_FROM_TO(0, 6, TEST_ALL_TAG_BITS, ignore);
-  #pragma pop_macro("TEST_ALL_TAG_BITS")
+#pragma pop_macro("TEST_ALL_TAG_BITS")
 
   // Set few tag bits and check
   ptr.SetTagBit<0>();
@@ -141,7 +137,7 @@ TEST(TaggedPtrTest, Complex) {
   tagTest.bucketData.SetTagBit<1>();
   TestBucketData tag_bucket_data;
   tag_bucket_data.data.s = "TagTest";
-  tagTest.bucketData.SetBucketData((uintptr_t) &tag_bucket_data);
+  tagTest.bucketData.SetBucketData((uintptr_t)&tag_bucket_data);
   EXPECT_TRUE(tagTest.bucketData.IsData());
   EXPECT_TRUE(tagTest.bucketData.IsTagBitSet<1>());
   EXPECT_EQ(tagTest.bucketData.GetData()->data.s, "TagTest");
@@ -158,11 +154,11 @@ TEST(TaggedPtrTest, Complex) {
   bucket_data.data.s = "testString";
   TestBucket bucket2;
   bucket2.id = 2;
-  bucket2.bucketData.SetBucketData((uintptr_t) &bucket_data);
+  bucket2.bucketData.SetBucketData((uintptr_t)&bucket_data);
   bucket2.bucketData.SetIsData();
   TestBucketData bucket_data1;
   bucket_data1.next = &bucket2;
-  bucket1.bucketData.SetBucketData((uintptr_t) &bucket_data1);
+  bucket1.bucketData.SetBucketData((uintptr_t)&bucket_data1);
 
   EXPECT_FALSE(bucket1.bucketData.IsData());
   auto first_bd = bucket1.bucketData.GetData();
@@ -170,4 +166,4 @@ TEST(TaggedPtrTest, Complex) {
   auto second_bd = first_bd->next->bucketData.GetData();
   EXPECT_EQ(second_bd->data.s, "testString");
 }
-};
+}; // namespace impala

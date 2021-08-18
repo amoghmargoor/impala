@@ -747,5 +747,4 @@ TEST_F(HashTableTest, BucketSize) {
   int bucket_size = HashTable::BUCKET_SIZE;
   EXPECT_EQ(bucket_size, 8);
 }
-
 }

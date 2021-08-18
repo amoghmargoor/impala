@@ -63,8 +63,8 @@ class Benchmark {
   /// will take *at least* initial_batch_size * function invocation time.
   /// 'fn' is the setup function to be run before every iteration if provided and
   /// it will not be measured.
-  std::string Measure(int max_time = 50, int initial_batch_size = 10,
-    BenchmarkSetupFunction fn = NULL);
+  std::string Measure(
+      int max_time = 50, int initial_batch_size = 10, BenchmarkSetupFunction fn = NULL);
 
   /// Output machine/build configuration as a string
   static std::string GetMachineInfo();

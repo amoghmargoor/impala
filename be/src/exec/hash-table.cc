@@ -577,7 +577,7 @@ Status HashTable::ResizeBuckets(
   unique_ptr<Suballocation> new_hash_allocation;
   RETURN_IF_ERROR(allocator_->Allocate(new_size, &new_allocation));
   Status hash_allocation_status =
-    allocator_->Allocate(new_hash_size, &new_hash_allocation);
+      allocator_->Allocate(new_hash_size, &new_hash_allocation);
   if (!hash_allocation_status.ok()) {
     if (new_allocation != NULL) allocator_->Free(move(new_allocation));
     return hash_allocation_status;

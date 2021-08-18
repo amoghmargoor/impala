@@ -703,20 +703,20 @@ class HashTable {
     ALWAYS_INLINE void SetMatched() { SetTagBit<0>(); }
     ALWAYS_INLINE void SetHasDuplicates() { SetTagBit<1>(); }
     template <class T, const bool TAGGED>
-    ALWAYS_INLINE void SetBucketData(T* data) { 
-      (TAGGED)? SetPtr(reinterpret_cast<uint8*>(data)) :
-        SetData(reinterpret_cast<uintptr_t>(data));
+    ALWAYS_INLINE void SetBucketData(T* data) {
+      (TAGGED) ? SetPtr(reinterpret_cast<uint8*>(data)) :
+                 SetData(reinterpret_cast<uintptr_t>(data));
     }
     template <bool TAGGED>
     ALWAYS_INLINE Tuple* GetTuple() {
       return (TAGGED) ? reinterpret_cast<Tuple*>(GetPtr()) :
-        reinterpret_cast<Tuple*>(GetData());
+                        reinterpret_cast<Tuple*>(GetData());
     }
     ALWAYS_INLINE DuplicateNode* GetDuplicate() {
       return reinterpret_cast<DuplicateNode*>(GetPtr());
     }
     ALWAYS_INLINE void PrepareBucketForInsert() { SetData(0); }
-    TaggedBucketData & operator=(const TaggedBucketData & bd) = default;
+    TaggedBucketData& operator=(const TaggedBucketData& bd) = default;
   };
 
   /// struct Bucket is referenced by SIZE_OF_BUCKET of planner/PlannerContext.java.
@@ -734,7 +734,9 @@ class HashTable {
     }
     /// Get Tuple
     template <bool TAGGED = true>
-    ALWAYS_INLINE Tuple* GetTuple() { return bd.GetTuple<TAGGED>(); }
+    ALWAYS_INLINE Tuple* GetTuple() {
+      return bd.GetTuple<TAGGED>();
+    }
     /// Get Duplicate Node
     ALWAYS_INLINE DuplicateNode* GetDuplicate() { return bd.GetDuplicate(); }
     /// Whether this bucket contains a vaild entry, or it is empty.
@@ -754,14 +756,15 @@ class HashTable {
       bd.SetBucketData<DuplicateNode, TAGGED>(node);
     }
     template <bool TAGGED = true>
-    ALWAYS_INLINE void SetTuple(Tuple* tuple) { bd.SetBucketData<Tuple, TAGGED>(tuple); }
+    ALWAYS_INLINE void SetTuple(Tuple* tuple) {
+      bd.SetBucketData<Tuple, TAGGED>(tuple);
+    }
     template <bool TAGGED = true>
     ALWAYS_INLINE void SetFlatRow(BufferedTupleStream::FlatRowPtr flat_row) {
       bd.SetBucketData<uint8_t, TAGGED>(flat_row);
     }
-    ALWAYS_INLINE void PrepareBucketForInsert() {
-      bd.PrepareBucketForInsert();
-    }
+    ALWAYS_INLINE void PrepareBucketForInsert() { bd.PrepareBucketForInsert(); }
+
    private:
     // This should not be exposed outside as implementation details
     // can change.
@@ -847,9 +850,9 @@ class HashTable {
   Iterator IR_ALWAYS_INLINE FindProbeRow(HashTableCtx* __restrict__ ht_ctx);
 
   /// Enum for the type of Bucket
-  enum BucketType: bool {
-    MATCH_SET = true, // matched flag is not set for the bucket 
-    MATCH_UNSET = false // matched flag is not set for the bucket 
+  enum BucketType : bool {
+    MATCH_SET = true, // matched flag is not set for the bucket
+    MATCH_UNSET = false // matched flag is not set for the bucket
   };
 
   /// If a match is found in the table, return an iterator as in FindProbeRow(). If a
@@ -1090,8 +1093,8 @@ class HashTable {
   /// There are wrappers of this function that perform the Find and Insert logic.
   template <bool INCLUSIVE_EQUALITY, bool COMPARE_ROW, BucketType TYPE = MATCH_SET>
   int64_t IR_ALWAYS_INLINE Probe(Bucket* buckets, uint32_t* hash_array,
-      int64_t num_buckets, HashTableCtx* __restrict__ ht_ctx, uint32_t hash,
-      bool* found, BucketData* bd);
+      int64_t num_buckets, HashTableCtx* __restrict__ ht_ctx, uint32_t hash, bool* found,
+      BucketData* bd);
 
   /// Performs the insert logic. Returns the Bucket* of the bucket where the data
   /// should be inserted either in the bucket itself or in it's DuplicateNode.
@@ -1125,8 +1128,8 @@ class HashTable {
   /// Returns NULL and sets 'status' to OK if the node array could not grow, i.e. there
   /// was not enough memory to allocate a new DuplicateNode. Returns NULL and sets
   /// 'status' to an error if another error was encountered.
-  DuplicateNode* IR_ALWAYS_INLINE InsertDuplicateNode(int64_t bucket_idx, Status* status,
-    BucketData* bucket_data);
+  DuplicateNode* IR_ALWAYS_INLINE InsertDuplicateNode(
+      int64_t bucket_idx, Status* status, BucketData* bucket_data);
 
   /// Resets the contents of the empty bucket with index 'bucket_idx', in preparation for
   /// an insert. Sets all the fields of the bucket other than 'data'.

@@ -93,7 +93,7 @@ namespace htbenchmark {
 
 class TestCtx {
  public:
-  TestCtx(): mem_pool_(&tracker_) {}
+  TestCtx() : mem_pool_(&tracker_) {}
   /// Temporary runtime environment for the hash table.
   unique_ptr<TestEnv> test_env_;
   RuntimeState* runtime_state_ = nullptr;
@@ -104,8 +104,8 @@ class TestCtx {
   vector<BufferPool::ClientHandle*> clients_;
   HashTable* hash_table_;
   boost::scoped_ptr<HashTableCtx> hash_context_;
-  vector<ScalarExpr *> build_exprs_;
-  vector<ScalarExpr *> probe_exprs_;
+  vector<ScalarExpr*> build_exprs_;
+  vector<ScalarExpr*> probe_exprs_;
   ObjectPool pool_;
   /// A dummy MemTracker used for exprs and other things we don't need to have limits on.
   MemTracker tracker_;
@@ -118,17 +118,16 @@ class TestCtx {
     CHECK(ht_success) << "Creation of HashTable failed";
     RowDescriptor rd;
     ScalarExpr* build_expr = pool_.Add(new SlotRef(ColumnType(TYPE_INT), 1, false));
-    Status status = ((SlotRef *) build_expr)->Init(rd, true, nullptr);
+    Status status = ((SlotRef*)build_expr)->Init(rd, true, nullptr);
     CHECK(status.ok());
     build_exprs_.push_back(build_expr);
     ScalarExpr* probe_expr = pool_.Add(new SlotRef(ColumnType(TYPE_INT), 1, false));
-    status = ((SlotRef *) probe_expr)->Init(rd, true, nullptr);
+    status = ((SlotRef*)probe_expr)->Init(rd, true, nullptr);
     CHECK(status.ok());
     probe_exprs_.push_back(probe_expr);
-    status = HashTableCtx::Create(&pool_, runtime_state_, build_exprs_,
-      probe_exprs_, false /* !stores_nulls_ */,
-      vector<bool>(build_exprs_.size(), false), 1, 0, 1, &mem_pool_, &mem_pool_,
-      &mem_pool_, &hash_context_);
+    status = HashTableCtx::Create(&pool_, runtime_state_, build_exprs_, probe_exprs_,
+        false /* !stores_nulls_ */, vector<bool>(build_exprs_.size(), false), 1, 0, 1,
+        &mem_pool_, &mem_pool_, &mem_pool_, &hash_context_);
     CHECK(status.ok());
   }
   void TearDown() {
@@ -196,7 +195,7 @@ class TestCtx {
 
     int64_t max_num_buckets = 1L << 31;
     hash_table_ = pool_.Add(HashTable::Create(
-      allocator, true, 1, nullptr, max_num_buckets, initial_num_buckets));
+        allocator, true, 1, nullptr, max_num_buckets, initial_num_buckets));
     status = hash_table_->Init(&success);
     if (!(status.ok() && success)) {
       std::cout << "HashTable Init failed" << std::endl;
@@ -206,22 +205,22 @@ class TestCtx {
   TupleRow* CreateTupleRow(int32_t val) {
     uint8_t* tuple_row_mem = mem_pool_.Allocate(sizeof(int32_t*));
     Tuple* tuple_mem = Tuple::Create(sizeof(char) + sizeof(int32_t), &mem_pool_);
-    *reinterpret_cast<int32_t *>(tuple_mem->GetSlot(1)) = val;
-    tuple_mem->SetNotNull(NullIndicatorOffset(0,1));
+    *reinterpret_cast<int32_t*>(tuple_mem->GetSlot(1)) = val;
+    tuple_mem->SetNotNull(NullIndicatorOffset(0, 1));
     TupleRow* row = reinterpret_cast<TupleRow*>(tuple_row_mem);
     row->SetTuple(0, tuple_mem);
     return row;
   }
   void CreateDataSet(int num_buckets, int unique_percent, int dup = 2) {
-    int u_idx = (num_buckets * unique_percent)/100;
-    TupleRow* row ;
+    int u_idx = (num_buckets * unique_percent) / 100;
+    TupleRow* row;
     for (int i = 1; i <= u_idx; i++) {
       row = CreateTupleRow(i);
       data.push_back(row);
     }
     int count = u_idx;
     for (int j = u_idx + 1; j <= num_buckets && count < num_buckets; j++) {
-      for (int i = 0; i < dup &&  count < num_buckets; i++) {
+      for (int i = 0; i < dup && count < num_buckets; i++) {
         row = CreateTupleRow(j);
         data.push_back(row);
         count++;
@@ -242,7 +241,7 @@ void Probe(TestCtx* ctx, vector<TupleRow*>& pdata) {
   HashTable* hTable = ctx->hash_table_;
   HashTableCtx* ht_ctx = ctx->hash_context_.get();
   HashTable::Iterator iter;
-  for (int i = 0; i< pdata.size(); i++) {
+  for (int i = 0; i < pdata.size(); i++) {
     const TupleRow* row = pdata[i];
     if (!ht_ctx->EvalAndHashProbe(row)) continue;
     iter = hTable->FindProbeRow(ht_ctx);
@@ -250,61 +249,60 @@ void Probe(TestCtx* ctx, vector<TupleRow*>& pdata) {
 }
 
 void Build(TestCtx* ctx, vector<TupleRow*>& bdata) {
-    HashTable* ht = ctx->hash_table_;
-    HashTableCtx* ht_ctx = ctx->hash_context_.get();
-    for (int i =0; i < bdata.size(); i++) {
-      TupleRow* row = bdata[i];
-      if (!ht_ctx->EvalAndHashBuild(row)) continue;
-      BufferedTupleStream::FlatRowPtr dummy_flat_row = nullptr;
-      Status status;
-      bool success = ht->Insert(ht_ctx, dummy_flat_row, row, &status);
-      CHECK(status.ok() && success) << "Inserting a tuple in HashTable failed";
-    }
+  HashTable* ht = ctx->hash_table_;
+  HashTableCtx* ht_ctx = ctx->hash_context_.get();
+  for (int i = 0; i < bdata.size(); i++) {
+    TupleRow* row = bdata[i];
+    if (!ht_ctx->EvalAndHashBuild(row)) continue;
+    BufferedTupleStream::FlatRowPtr dummy_flat_row = nullptr;
+    Status status;
+    bool success = ht->Insert(ht_ctx, dummy_flat_row, row, &status);
+    CHECK(status.ok() && success) << "Inserting a tuple in HashTable failed";
+  }
 }
 
 namespace build {
-  void SetUp(void * args) {
-    TestCtx* ctx = reinterpret_cast<TestCtx*>(args);
-    // Clear old tuples of hash table
-    ctx->hash_table_->Close();
-    bool got_memory = true;
-    Status status = ctx->hash_table_->Init(&got_memory);
-    CHECK(status.ok() && got_memory) << "HashTable Reinitialization failed";
-  }
-  void Benchmark(int batch_size, void* args) {
-    // batch_size is ignored. This is run just once.
-    TestCtx* ctx = reinterpret_cast<TestCtx*>(args);
-    Build(ctx, ctx->data);
-  }
-};
+void SetUp(void* args) {
+  TestCtx* ctx = reinterpret_cast<TestCtx*>(args);
+  // Clear old tuples of hash table
+  ctx->hash_table_->Close();
+  bool got_memory = true;
+  Status status = ctx->hash_table_->Init(&got_memory);
+  CHECK(status.ok() && got_memory) << "HashTable Reinitialization failed";
+}
+void Benchmark(int batch_size, void* args) {
+  // batch_size is ignored. This is run just once.
+  TestCtx* ctx = reinterpret_cast<TestCtx*>(args);
+  Build(ctx, ctx->data);
+}
+}; // namespace build
 
 namespace probe {
-  void Benchmark(int batch_size, void* args) {
-    // batch_size is ignored. This is run just once.
-    TestCtx* ctx = reinterpret_cast<TestCtx*>(args);
-    Probe(ctx, ctx->data);
-  }
-};
-};
+void Benchmark(int batch_size, void* args) {
+  // batch_size is ignored. This is run just once.
+  TestCtx* ctx = reinterpret_cast<TestCtx*>(args);
+  Probe(ctx, ctx->data);
+}
+}; // namespace probe
+}; // namespace htbenchmark
 
 using namespace htbenchmark;
-std::string ResultString(vector<std::string> benchmark_names,
-  vector<int64_t> memory_consumption) {
+std::string ResultString(
+    vector<std::string> benchmark_names, vector<int64_t> memory_consumption) {
   stringstream ss;
   int function_out_width = 50;
   int mem_width = 20;
   int total_width = function_out_width + mem_width;
   std::string name("Hash Table Memory Consumption");
-  ss << name << ":"
-     << setw(function_out_width - name.size() - 1) << "Function"
-     << setw(mem_width) << "Bytes Consumed"  << std::endl;
+  ss << name << ":" << setw(function_out_width - name.size() - 1) << "Function"
+     << setw(mem_width) << "Bytes Consumed" << std::endl;
   for (int i = 0; i < total_width; ++i) {
     ss << '-';
   }
   ss << std::endl;
   for (int i = 0; i < benchmark_names.size(); i++) {
-    ss << setw(function_out_width) << benchmark_names[i]
-       << setw(mem_width) << memory_consumption[i] << std::endl;
+    ss << setw(function_out_width) << benchmark_names[i] << setw(mem_width)
+       << memory_consumption[i] << std::endl;
   }
   return ss.str();
 }
@@ -315,49 +313,49 @@ int64_t GetMemoryBytesConsumed(HashTable* ht) {
   return mem_size - (empty_buckets * (HashTable::BUCKET_SIZE + 4));
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   impala::InitCommonRuntime(argc, argv, true, impala::TestInfo::BE_TEST);
   impala::InitFeSupport();
   /// Runtime Benchmark
   std::cout << Benchmark::GetMachineInfo() << std::endl;
   std::cout << "Note: Benchmark name are in format <name>_XX_YY:" << std::endl
-    << "name represents the name of benchmark (probe|build|memory)." << std::endl
-    << "XX represents the number of rows in the dataset." << std::endl
-    << "YY represents the percentage of unique values in dataset." << std::endl;
+            << "name represents the name of benchmark (probe|build|memory)." << std::endl
+            << "XX represents the number of rows in the dataset." << std::endl
+            << "YY represents the percentage of unique values in dataset." << std::endl;
   std::cout << "Runtime Benchmark" << std::endl;
   std::cout << "-----------------" << std::endl;
 
   Benchmark hash_table_build("Hash Table Build", false);
   Benchmark hash_table_probe("Hash Table Probe", false);
-  vector<int> num_tuples { 65536, 262144 };
-  vector<int> unique_percent { 100, 60, 20 };
+  vector<int> num_tuples{65536, 262144};
+  vector<int> unique_percent{100, 60, 20};
   vector<TestCtx*> ctxs;
   for (int num = 0; num < num_tuples.size(); num++) {
     for (int up = 0; up < unique_percent.size(); up++) {
       std::stringstream pname;
       std::stringstream bname;
-      pname << "probe_" << num_tuples[num] << "_" <<  unique_percent[up];
-      bname << "build_" << num_tuples[num] << "_" <<  unique_percent[up];
-      TestCtx *ctx = new TestCtx();
+      pname << "probe_" << num_tuples[num] << "_" << unique_percent[up];
+      bname << "build_" << num_tuples[num] << "_" << unique_percent[up];
+      TestCtx* ctx = new TestCtx();
       ctx->SetUp(num_tuples[num]);
       ctxs.push_back(ctx);
       ctx->CreateDataSet(num_tuples[num], unique_percent[up]);
-      hash_table_build.AddBenchmark(bname.str(), build::Benchmark, (void *) ctx, -1);
-      hash_table_probe.AddBenchmark(pname.str(), probe::Benchmark, (void *) ctx, -1);
+      hash_table_build.AddBenchmark(bname.str(), build::Benchmark, (void*)ctx, -1);
+      hash_table_probe.AddBenchmark(pname.str(), probe::Benchmark, (void*)ctx, -1);
     }
   }
 
   // Create Probe benchmark for Data not found in the table
   for (int num = 0; num < num_tuples.size(); num++) {
-      TestCtx *ctx = new TestCtx();
-      ctx->SetUp(num_tuples[num]);
-      ctxs.push_back(ctx);
-      ctx->CreateDataSet(num_tuples[num], 10);
-      Build(ctx, ctx->data);
-      ctx->CreateAbsentKeysData(num_tuples[num]);
-      std::stringstream pname;
-      pname << "probe_" << num_tuples[num] << "_absentkeys";
-      hash_table_probe.AddBenchmark(pname.str(), probe::Benchmark, (void *) ctx, -1);
+    TestCtx* ctx = new TestCtx();
+    ctx->SetUp(num_tuples[num]);
+    ctxs.push_back(ctx);
+    ctx->CreateDataSet(num_tuples[num], 10);
+    Build(ctx, ctx->data);
+    ctx->CreateAbsentKeysData(num_tuples[num]);
+    std::stringstream pname;
+    pname << "probe_" << num_tuples[num] << "_absentkeys";
+    hash_table_probe.AddBenchmark(pname.str(), probe::Benchmark, (void*)ctx, -1);
   }
   std::cout << hash_table_build.Measure(50, 10, build::SetUp) << std::endl;
   std::cout << hash_table_probe.Measure() << std::endl;
@@ -375,10 +373,10 @@ int main(int argc, char **argv) {
   num_tuples.clear();
   num_tuples.push_back(1024 * 1024);
   num_tuples.push_back(4 * 1024 * 1024);
-   for (int num = 0; num < num_tuples.size(); num++) {
+  for (int num = 0; num < num_tuples.size(); num++) {
     for (int up = 0; up < unique_percent.size(); up++) {
       std::stringstream bname;
-      bname << "memory_" << num_tuples[num] << "_" <<  unique_percent[up];
+      bname << "memory_" << num_tuples[num] << "_" << unique_percent[up];
       TestCtx ctx;
       ctx.SetUp(num_tuples[num]);
       ctx.CreateDataSet(num_tuples[num], unique_percent[up]);
