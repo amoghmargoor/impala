@@ -115,21 +115,21 @@ class TestCtx {
     CreateTestEnv();
     initial_num_buckets = num_buckets;
     bool ht_success = CreateHashTable();
-    DCHECK(ht_success) << "Creation of HashTable failed";
+    CHECK(ht_success) << "Creation of HashTable failed";
     RowDescriptor rd;
     ScalarExpr* build_expr = pool_.Add(new SlotRef(ColumnType(TYPE_INT), 1, false));
     Status status = ((SlotRef *) build_expr)->Init(rd, true, nullptr);
-    DCHECK_OK(status);
+    CHECK(status.ok());
     build_exprs_.push_back(build_expr);
     ScalarExpr* probe_expr = pool_.Add(new SlotRef(ColumnType(TYPE_INT), 1, false));
     status = ((SlotRef *) probe_expr)->Init(rd, true, nullptr);
-    DCHECK_OK(status);
+    CHECK(status.ok());
     probe_exprs_.push_back(probe_expr);
     status = HashTableCtx::Create(&pool_, runtime_state_, build_exprs_,
       probe_exprs_, false /* !stores_nulls_ */,
       vector<bool>(build_exprs_.size(), false), 1, 0, 1, &mem_pool_, &mem_pool_,
       &mem_pool_, &hash_context_);
-    DCHECK_OK(status);
+    CHECK(status.ok());
   }
   void TearDown() {
     ScalarExpr::Close(build_exprs_);
@@ -151,7 +151,7 @@ class TestCtx {
     test_env_.reset(new TestEnv());
     test_env_->SetBufferPoolArgs(min_page_size, buffer_bytes_limit);
     Status status = test_env_->Init();
-    DCHECK_OK(status);
+    CHECK(status.ok());
 
     TQueryOptions query_options;
     query_options.__set_default_spillable_buffer_size(min_page_size);
@@ -159,7 +159,7 @@ class TestCtx {
     query_options.__set_buffer_pool_limit(buffer_bytes_limit);
     // Also initializes runtime_state_
     status = test_env_->CreateQueryState(0, &query_options, &runtime_state_);
-    DCHECK_OK(status);
+    CHECK(status.ok());
   }
   /// Construct hash table and buffer pool client.
   /// Created objects and resources (e.g. reservations) are automatically freed
@@ -237,9 +237,7 @@ class TestCtx {
     }
   }
 };
-};
 
-using namespace htbenchmark;
 void Probe(TestCtx* ctx, vector<TupleRow*>& pdata) {
   HashTable* hTable = ctx->hash_table_;
   HashTableCtx* ht_ctx = ctx->hash_context_.get();
@@ -260,7 +258,7 @@ void Build(TestCtx* ctx, vector<TupleRow*>& bdata) {
       BufferedTupleStream::FlatRowPtr dummy_flat_row = nullptr;
       Status status;
       bool success = ht->Insert(ht_ctx, dummy_flat_row, row, &status);
-      DCHECK(status.ok() && success) << "Inserting a tuple in HashTable failed";
+      CHECK(status.ok() && success) << "Inserting a tuple in HashTable failed";
     }
 }
 
@@ -271,7 +269,7 @@ namespace build {
     ctx->hash_table_->Close();
     bool got_memory = true;
     Status status = ctx->hash_table_->Init(&got_memory);
-    DCHECK(status.ok() && got_memory) << "HashTable Reinitialization failed";
+    CHECK(status.ok() && got_memory) << "HashTable Reinitialization failed";
   }
   void Benchmark(int batch_size, void* args) {
     // batch_size is ignored. This is run just once.
@@ -287,7 +285,9 @@ namespace probe {
     Probe(ctx, ctx->data);
   }
 };
+};
 
+using namespace htbenchmark;
 std::string ResultString(vector<std::string> benchmark_names,
   vector<int64_t> memory_consumption) {
   stringstream ss;
