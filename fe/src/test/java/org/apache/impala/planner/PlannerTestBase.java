@@ -420,12 +420,15 @@ public class PlannerTestBase extends FrontendTestBase {
     }
     checkColumnLineage(testCase, singleNodeExecRequest, errorLog, actualOutput);
     checkLimitCardinality(query, singleNodeExecRequest, errorLog);
+    actualOutput.append("\n");
     // Test distributed plan.
     testPlan(testCase, Section.DISTRIBUTEDPLAN, queryCtx.deepCopy(), testOptions,
         errorLog, actualOutput);
+    actualOutput.append("\n");
     // test parallel plans
     testPlan(testCase, Section.PARALLELPLANS, queryCtx.deepCopy(), testOptions,
         errorLog, actualOutput);
+    actualOutput.append("\n");
   }
 
   /**
@@ -915,7 +918,7 @@ public class PlannerTestBase extends FrontendTestBase {
     }
 
     // Create the actual output file
-    if (GENERATE_OUTPUT_FILE) {
+    if (GENERATE_OUTPUT_FILE && errorLog.length() != 0) {
       try {
         outDir_.toFile().mkdirs();
         FileWriter fw = new FileWriter(outDir_.resolve(testFile + ".test").toFile());
