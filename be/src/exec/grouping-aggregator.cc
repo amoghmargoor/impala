@@ -47,6 +47,8 @@
 
 namespace impala {
 
+typedef HashTable::BucketType BucketType;
+
 /// The minimum reduction factor (input rows divided by output rows) to grow hash tables
 /// in a streaming preaggregation, given that the hash tables are currently the given
 /// size or above. The sizes roughly correspond to hash table sizes where the bucket

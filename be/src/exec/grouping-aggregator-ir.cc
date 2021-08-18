@@ -24,6 +24,8 @@
 
 using namespace impala;
 
+typedef HashTable::BucketType BucketType;
+
 template <bool AGGREGATED_ROWS>
 Status GroupingAggregator::AddBatchImpl(RowBatch* batch,
     TPrefetchMode::type prefetch_mode, HashTableCtx* __restrict__ ht_ctx,
@@ -237,9 +239,9 @@ bool GroupingAggregator::TryAddToHashTable(HashTableCtx* __restrict__ ht_ctx,
   Tuple* intermediate_tuple;
   // This is called from ProcessBatchStreaming() so the rows are not aggregated.
   HashTable::Iterator it = 
-    hash_tbl->FindBuildRowBucket<HashTable::BucketType::MATCH_UNSET>(ht_ctx, &found);
+    hash_tbl->FindBuildRowBucket<BucketType::MATCH_UNSET>(ht_ctx, &found);
   if (found) {
-    intermediate_tuple = it.GetTuple<HashTable::BucketType::MATCH_UNSET>();
+    intermediate_tuple = it.GetTuple<BucketType::MATCH_UNSET>();
   } else if (*remaining_capacity == 0) {
     return false;
   } else {

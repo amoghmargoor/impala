@@ -47,7 +47,7 @@ inline void HashTableCtx::ExprValuesCache::NextRow() {
   DCHECK_LE(cur_expr_values_hash_ - expr_values_hash_array_.get(), capacity_);
 }
 
-template <bool INCLUSIVE_EQUALITY, bool COMPARE_ROW, BucketType TYPE>
+template <bool INCLUSIVE_EQUALITY, bool COMPARE_ROW, HashTable::BucketType TYPE>
 inline int64_t HashTable::Probe(Bucket* buckets, uint32_t* hash_array,
     int64_t num_buckets, HashTableCtx* __restrict__ ht_ctx, uint32_t hash, bool* found,
     BucketData* bd) {
@@ -166,7 +166,7 @@ inline HashTable::Iterator HashTable::FindProbeRow(HashTableCtx* __restrict__ ht
 
 
 // TODO: support lazy evaluation like HashTable::Insert().
-template<bool TYPE>
+template<HashTable::BucketType TYPE>
 inline HashTable::Iterator HashTable::FindBuildRowBucket(
     HashTableCtx* __restrict__ ht_ctx, bool* found) {
   uint32_t hash = ht_ctx->expr_values_cache()->CurExprValuesHash();
@@ -276,7 +276,7 @@ inline TupleRow* IR_ALWAYS_INLINE HashTable::GetRow(HtData& htdata, TupleRow* ro
   }
 }
 
-template <BucketType TYPE>
+template <HashTable::BucketType TYPE>
 inline TupleRow* IR_ALWAYS_INLINE HashTable::GetRow(
     Bucket* bucket, TupleRow* row, BucketData* bucket_data) const {
   DCHECK(bucket != NULL);
@@ -305,7 +305,7 @@ inline TupleRow* IR_ALWAYS_INLINE HashTable::Iterator::GetRow() const {
   }
 }
 
-template <BucketType TYPE>
+template <HashTable::BucketType TYPE>
 inline Tuple* IR_ALWAYS_INLINE HashTable::Iterator::GetTuple() const {
   DCHECK(!AtEnd());
   DCHECK(table_->stores_tuples());

@@ -78,18 +78,18 @@ template<class T, bool OWNS=true> class TaggedPtr {
  
   template <uint8_t bit>
   ALWAYS_INLINE void SetTagBit() {
-    DCHECK_IN_RANGE(bit, 0, 6) << "tag bit can only be from 0 to 6";
+    DCHECK_IN_RANGE(bit, 0, 6);
     data_ = (data_ | DATA_MASK<bit>);
   }
   template <uint8_t bit>
   ALWAYS_INLINE void UnsetTagBit() {
-    DCHECK_IN_RANGE(bit, 0, 6) << "tag bit can only be from 0 to 6";
+    DCHECK_IN_RANGE(bit, 0, 6);
     data_ = (data_ & DATA_MASK_INVERSE<bit>);
   }
 
   template <uint8_t bit>
   ALWAYS_INLINE bool IsTagBitSet() {
-    DCHECK_IN_RANGE(bit, 0, 6) << "tag bit can only be from 0 to 6";
+    DCHECK_IN_RANGE(bit, 0, 6);
     return data_ & DATA_MASK<bit>;
   }
 
@@ -119,7 +119,7 @@ template<class T, bool OWNS=true> class TaggedPtr {
  protected:
   // Don't use unless client wants to retain the ownership of pointer.
   ALWAYS_INLINE void SetPtr(T* ptr) {
-    data_ = (data_ & ~MASK_0_56_BITS_INVERSE) | (reinterpret_cast<uintptr_t>(ptr));
+    data_ = (data_ & MASK_0_56_BITS_INVERSE) | (reinterpret_cast<uintptr_t>(ptr));
   }
   ALWAYS_INLINE void SetData(uintptr_t data) { data_ = data; }
   ALWAYS_INLINE uintptr_t GetData() { return data_; }

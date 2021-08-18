@@ -16,6 +16,7 @@
 // under the License.
 
 #include <string>
+#include <boost/preprocessor/repetition/repeat_from_to.hpp>
 #include "testutil/gtest-util.h"
 #include "util/tagged-ptr.h"
 
@@ -87,12 +88,15 @@ TEST(TaggedPtrTest, Simple) {
   EXPECT_EQ(ptr.GetTag(), 0);
 
   // Set/Unset all tag bits and Check
-  for (int i = 0; i < 7; i++) {
-    ptr.SetTagBit<i>();
-    EXPECT_TRUE(ptr.IsTagBitSet<i>());
-    ptr.UnsetTagBit<i>();
-    EXPECT_FALSE(ptr.IsTagBitSet<i>());
-  }
+  #pragma push_macro("TEST_ALL_TAG_BITS")
+  #define TEST_ALL_TAG_BITS(ignore1, i, ignore2) \
+  ptr.SetTagBit<i>();                          \
+  EXPECT_TRUE(ptr.IsTagBitSet<i>());         \
+  ptr.UnsetTagBit<i>();                      \
+  EXPECT_FALSE(ptr.IsTagBitSet<i>());        \
+
+  BOOST_PP_REPEAT_FROM_TO(0, 6, TEST_ALL_TAG_BITS, ignore);
+  #pragma pop_macro("TEST_ALL_TAG_BITS")
 
   // Set few tag bits and check
   ptr.SetTagBit<0>();

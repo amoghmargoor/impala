@@ -602,7 +602,7 @@ Status HashTable::ResizeBuckets(
     uint32_t hash = hash_array_[iter.bucket_idx_];
     bool found = false;
     BucketData bd;
-    int64_t bucket_idx = Probe<true, false, false>(
+    int64_t bucket_idx = Probe<true, false, HashTable::BucketType::MATCH_UNSET>(
         new_buckets, new_hash_array, num_buckets, ht_ctx, hash, &found, &bd);
     DCHECK(!found);
     DCHECK_NE(bucket_idx, Iterator::BUCKET_NOT_FOUND) << " Probe failed even though "

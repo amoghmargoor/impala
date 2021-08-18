@@ -847,10 +847,10 @@ class HashTable {
   Iterator IR_ALWAYS_INLINE FindProbeRow(HashTableCtx* __restrict__ ht_ctx);
 
   /// Enum for the type of Bucket
-  enum BucketType: boolean {
+  enum BucketType: bool {
     MATCH_SET = true, // matched flag is not set for the bucket 
     MATCH_UNSET = false // matched flag is not set for the bucket 
-  }
+  };
 
   /// If a match is found in the table, return an iterator as in FindProbeRow(). If a
   /// match was not present, return an iterator pointing to the empty bucket where the key
