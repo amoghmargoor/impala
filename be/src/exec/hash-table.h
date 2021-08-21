@@ -702,11 +702,15 @@ class HashTable {
     ALWAYS_INLINE bool HasDuplicates() { return IsTagBitSet<1>(); }
     ALWAYS_INLINE void SetMatched() { SetTagBit<0>(); }
     ALWAYS_INLINE void SetHasDuplicates() { SetTagBit<1>(); }
+    /// Set 'data' as BucketData. If bucket doesn't have tag fields set, TAGGED can
+    /// be set to 'false' to avoid extra bit operations.
     template <class T, const bool TAGGED>
     ALWAYS_INLINE void SetBucketData(T* data) {
       (TAGGED) ? SetPtr(reinterpret_cast<uint8*>(data)) :
                  SetData(reinterpret_cast<uintptr_t>(data));
     }
+    /// Get tuple pointer stored. If Bucket doesn't have tag fields set,
+    /// TAGGED can be set to 'false' to avoid extra bit operations.
     template <bool TAGGED>
     ALWAYS_INLINE Tuple* GetTuple() {
       return (TAGGED) ? reinterpret_cast<Tuple*>(GetPtr()) :
@@ -725,14 +729,16 @@ class HashTable {
   /// TaggedPtr. Check comments for TaggedBucketData for details on booleans
   /// stored.
   struct Bucket {
-    /// Return the BucketData
+    /// Return the BucketData. If bucket doesn't have tag fields set, TAGGED can
+    /// be set to 'false' to avoid extra bit operations.
     template <bool TAGGED = true>
     ALWAYS_INLINE BucketData GetBucketData() {
       BucketData bucket_data;
       bucket_data.htdata.tuple = bd.GetTuple<TAGGED>();
       return bucket_data;
     }
-    /// Get Tuple
+    /// Get Tuple pointer stored in bucket. If bucket doesn't have tag fields set,
+    /// TAGGED can be set to 'false' to avoid extra bit operations.
     template <bool TAGGED = true>
     ALWAYS_INLINE Tuple* GetTuple() {
       return bd.GetTuple<TAGGED>();
@@ -747,18 +753,23 @@ class HashTable {
     /// Indicates if bucket has duplicates instead of data for bucket.
     ALWAYS_INLINE bool HasDuplicates() { return bd.HasDuplicates(); }
 
-    // Set/Unset methods corresponding to above.
+    /// Set/Unset methods corresponding to above.
     ALWAYS_INLINE void SetMatched() { bd.SetMatched(); }
     ALWAYS_INLINE void SetHasDuplicates() { bd.SetHasDuplicates(); }
-    // Setting Data or Duplicate Node
+    /// Set DuplicateNode pointer as data. If bucket doesn't have tag fields set,
+    /// TAGGED can be set to 'false' to avoid extra bit operations.
     template <bool TAGGED = true>
     ALWAYS_INLINE void SetDuplicate(DuplicateNode* node) {
       bd.SetBucketData<DuplicateNode, TAGGED>(node);
     }
+    /// Set Tuple pointer as data. If bucket doesn't have tag fields set,
+    /// TAGGED can be set to 'false' to avoid extra bit operations.
     template <bool TAGGED = true>
     ALWAYS_INLINE void SetTuple(Tuple* tuple) {
       bd.SetBucketData<Tuple, TAGGED>(tuple);
     }
+    /// Set FlatRowPtr as data. If bucket doesn't have tag fields set,
+    /// TAGGED can be set to 'false' to avoid extra bit operations.
     template <bool TAGGED = true>
     ALWAYS_INLINE void SetFlatRow(BufferedTupleStream::FlatRowPtr flat_row) {
       bd.SetBucketData<uint8_t, TAGGED>(flat_row);
