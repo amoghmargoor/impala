@@ -2277,6 +2277,11 @@ Status HdfsParquetScanner::FillScratchBatch(const vector<ParquetColumnReader*>& 
         }
         last = micro_batches[r].end;
       }
+      if (UNLIKELY(last < 1023)) {
+        if (UNLIKELY(!col_reader->SkipTopLevelRows(1023 - last))) {
+          return Status(Substitute("Couldn't skip rows in file $0.", filename()));
+        }
+      }
       // Check that all column readers populated the same number of values.
       bool num_tuples_mismatch = c != 0 && last_num_tuples != num_tuples;
       if (UNLIKELY(!continue_execution || num_tuples_mismatch)) {
