@@ -2152,7 +2152,7 @@ Status HdfsParquetScanner::AssembleRows(
       batches[0].end = scratch_batch_->capacity - 1;
       batches[0].length = scratch_batch_->capacity;
       Status fill_status = FillScratchBatch(column_readers, row_batch, skip_row_group,
-        scratch_batch_->tuple_mem, batches, 1);
+        scratch_batch_->tuple_mem, batches, 1, scratch_batch_->num_tuples);
       if (!fill_status.ok()) {
         return fill_status; 
       }
@@ -2169,11 +2169,11 @@ Status HdfsParquetScanner::AssembleRows(
       batches[0].end = scratch_batch_->capacity - 1;
       batches[0].length = scratch_batch_->capacity;
       Status fill_status = FillScratchBatch(filter_readers, row_batch, skip_row_group,
-        scratch_batch_->tuple_mem, batches, 1);
+        scratch_batch_->tuple_mem, batches, 1, scratch_batch_->num_tuples);
       if (!fill_status.ok()) {
         return fill_status;
       }
-      
+      num_rows_read += scratch_batch_->num_tuples;
       std::bitset<1024> selected_rows;
       int num_row_to_commit = TransferScratchTuples(row_batch, selected_rows);
       if (num_row_to_commit == 0) {
@@ -2181,20 +2181,23 @@ Status HdfsParquetScanner::AssembleRows(
         // skip reading for rest of the non-filter column readers now.
         for (int c = 0; c < non_filter_readers.size(); ++c) {
           ParquetColumnReader* col_reader = non_filter_readers[c];
-          col_reader->SkipTopLevelRows(num_rows_read);
+          if (UNLIKELY(!col_reader->SkipTopLevelRows(num_rows_read))) {
+            return Status(Substitute("Couldn't skip rows in file $0.", filename()));
+          }
         }
       } else {
         Tuple* output_row_start = row_batch->GetRow(row_batch->num_rows())->GetTuple(0);
         ScratchMicroBatch micro_batches[scratch_batch_->capacity];
         int num_micro_batches = ConvertToRange(selected_rows, micro_batches, 10);
+        int num_tuples;
         Status fill_status = FillScratchBatch(non_filter_readers, row_batch, skip_row_group,
-          reinterpret_cast<uint8_t*>(output_row_start), micro_batches, num_micro_batches);
+          reinterpret_cast<uint8_t*>(output_row_start), micro_batches, num_micro_batches,
+          num_tuples);
         if (!fill_status.ok()) {
           return fill_status;
         }
       }
         RETURN_IF_ERROR(CheckPageFiltering());
-        num_rows_read += scratch_batch_->num_tuples;
         RETURN_IF_ERROR(CommitRows(row_batch, num_row_to_commit));
         if (row_batch->AtCapacity()) break;
     }
@@ -2248,7 +2251,8 @@ Status HdfsParquetScanner::FillScratchBatch(const vector<ParquetColumnReader*>& 
     bool* skip_row_group,
     uint8_t* tuple_mem,
     const ScratchMicroBatch* micro_batches,
-    int num_micro_batches) {
+    int num_micro_batches,
+    int& num_tuples) {
       // Materialize the top-level slots into the scratch batch column-by-column.
     int last_num_tuples = -1;
     for (int c = 0; c < column_readers.size(); ++c) {
@@ -2257,37 +2261,40 @@ Status HdfsParquetScanner::FillScratchBatch(const vector<ParquetColumnReader*>& 
       int last = -1;
       for (int r = 0; r < num_micro_batches; r++) {
         if (last != -1) {
-          col_reader->SkipTopLevelRows(micro_batches[r].start - last - 1);
+          if (UNLIKELY(!col_reader->SkipTopLevelRows(
+              micro_batches[r].start - last - 1))) {
+            return Status(Substitute("Couldn't skip rows in file $0.", filename()));
+          }
         }
         if (col_reader->max_rep_level() > 0) {
           continue_execution = col_reader->ReadValueBatch(&scratch_batch_->aux_mem_pool,
               micro_batches[r].length, tuple_byte_size_, tuple_mem,
-              &scratch_batch_->num_tuples);
+              &num_tuples);
         } else {
           continue_execution = col_reader->ReadNonRepeatedValueBatch(
               &scratch_batch_->aux_mem_pool, micro_batches[r].length, tuple_byte_size_,
-              tuple_mem, &scratch_batch_->num_tuples);
+              tuple_mem, &num_tuples);
         }
         last = micro_batches[r].end;
       }
       // Check that all column readers populated the same number of values.
-      bool num_tuples_mismatch = c != 0 && last_num_tuples != scratch_batch_->num_tuples;
+      bool num_tuples_mismatch = c != 0 && last_num_tuples != num_tuples;
       if (UNLIKELY(!continue_execution || num_tuples_mismatch)) {
         // Skipping this row group. Free up all the resources with this row group.
         FlushRowGroupResources(row_batch);
-        scratch_batch_->num_tuples = 0;
+        num_tuples = 0;
         DCHECK(scratch_batch_->AtEnd());
         *skip_row_group = true;
         if (num_tuples_mismatch && continue_execution) {
           Status err(Substitute("Corrupt Parquet file '$0': column '$1' "
               "had $2 remaining values but expected $3", filename(),
               col_reader->schema_element().name, last_num_tuples,
-              scratch_batch_->num_tuples));
+              num_tuples));
           parse_status_.MergeStatus(err);
         }
         return Status::OK();
       }
-      last_num_tuples = scratch_batch_->num_tuples;
+      last_num_tuples = num_tuples;
     }
   return Status::OK();
 }
@@ -2761,6 +2768,7 @@ Status HdfsParquetScanner::InitScalarColumns() {
     }
     RETURN_IF_ERROR(scalar_reader->Reset(*file_desc, col_chunk, row_group_idx_));
   }
+  RETURN_IF_ERROR(DivideReservationBetweenColumns(scalar_readers_));
   return Status::OK();
 }
 

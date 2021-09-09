@@ -1216,8 +1216,14 @@ Status BaseScalarColumnReader::StartPageFiltering() {
 }
 
 bool BaseScalarColumnReader::SkipTopLevelRows(int64_t num_rows) {
-  DCHECK_GE(num_buffered_values_, num_rows);
   DCHECK_GT(num_rows, 0);
+  while (UNLIKELY(num_buffered_values_ < num_rows)) {
+    num_rows -= num_buffered_values_;
+    current_row_ += num_buffered_values_;
+    num_buffered_values_ = 0;
+    if (!NextPage()) { return false; }
+  }
+  DCHECK_GE(num_buffered_values_, num_rows);
   // Fastest path: field is required and not nested.
   // So row count equals value count, and every value is stored in the page data.
   if (max_def_level() == 0 && max_rep_level() == 0) {

@@ -918,7 +918,8 @@ class HdfsParquetScanner : public HdfsColumnarScanner {
     bool* skip_row_group,
     uint8_t* tuple_mem,
     const ScratchMicroBatch* micro_batches,
-    int num_micro_batches);
+    int num_micro_batches,
+    int& num_tuples);
 
   /// Creates ranges of microbatches that needs to be scanned.
   /// Bits set in 'selected_rows' are the rows that needs to be scanned. Consecutive
