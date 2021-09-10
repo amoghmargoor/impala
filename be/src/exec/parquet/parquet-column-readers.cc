@@ -1215,21 +1215,23 @@ Status BaseScalarColumnReader::StartPageFiltering() {
   return Status::OK();
 }
 
-bool BaseScalarColumnReader::SkipTopLevelRows(int64_t num_rows) {
-  DCHECK_GT(num_rows, 0);
-  while (UNLIKELY(num_buffered_values_ < num_rows)) {
-    num_rows -= num_buffered_values_;
-    current_row_ += num_buffered_values_;
-    num_buffered_values_ = 0;
+bool BaseScalarColumnReader::SkipTopLevelRows(int64_t total_num_rows) {
+  DCHECK_GT(total_num_rows, 0);
+  if (num_buffered_values_ == 0) {
     if (!NextPage()) { return false; }
   }
+  DCHECK_GT(num_buffered_values_, 0);
+  int64_t num_rows = std::min(total_num_rows,
+    ((int64_t) num_buffered_values_));
+  int64_t remaining = total_num_rows - num_rows;
   DCHECK_GE(num_buffered_values_, num_rows);
   // Fastest path: field is required and not nested.
   // So row count equals value count, and every value is stored in the page data.
   if (max_def_level() == 0 && max_rep_level() == 0) {
     current_row_ += num_rows;
     num_buffered_values_ -= num_rows;
-    return SkipEncodedValuesInPage(num_rows);
+    return remaining == 0 ? SkipEncodedValuesInPage(num_rows)
+      : SkipEncodedValuesInPage(num_rows) && SkipTopLevelRows(remaining);
   }
   int64_t num_values_to_skip = 0;
   if (max_rep_level() == 0) {
@@ -1277,7 +1279,8 @@ bool BaseScalarColumnReader::SkipTopLevelRows(int64_t num_rows) {
       }
     }
   }
-  return SkipEncodedValuesInPage(num_values_to_skip);
+  return remaining == 0 ? SkipEncodedValuesInPage(num_values_to_skip):
+    SkipEncodedValuesInPage(num_values_to_skip) && SkipTopLevelRows(remaining);
 }
 
 int BaseScalarColumnReader::FillPositionsInCandidateRange(int rows_remaining,

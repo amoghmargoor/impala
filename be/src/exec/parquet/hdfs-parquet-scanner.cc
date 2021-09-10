@@ -2181,7 +2181,7 @@ Status HdfsParquetScanner::AssembleRows(
         // skip reading for rest of the non-filter column readers now.
         for (int c = 0; c < non_filter_readers.size(); ++c) {
           ParquetColumnReader* col_reader = non_filter_readers[c];
-          if (UNLIKELY(!col_reader->SkipTopLevelRows(num_rows_read))) {
+          if (UNLIKELY(!col_reader->SkipTopLevelRows(scratch_batch_->num_tuples))) {
             return Status(Substitute("Couldn't skip rows in file $0.", filename()));
           }
         }
@@ -2260,7 +2260,13 @@ Status HdfsParquetScanner::FillScratchBatch(const vector<ParquetColumnReader*>& 
       bool continue_execution;
       int last = -1;
       for (int r = 0; r < num_micro_batches; r++) {
-        if (last != -1) {
+        if (r == 0) {
+          if (micro_batches[0].start > 0) {
+            if (UNLIKELY(!col_reader->SkipTopLevelRows(micro_batches[r].start))) {
+              return Status(Substitute("Couldn't skip rows in file $0.", filename()));
+            }
+          }
+        } else {
           if (UNLIKELY(!col_reader->SkipTopLevelRows(
               micro_batches[r].start - last - 1))) {
             return Status(Substitute("Couldn't skip rows in file $0.", filename()));

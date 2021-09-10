@@ -50,10 +50,12 @@ int HdfsColumnarScanner::ProcessScratchBatch(RowBatch* dst_batch, std::bitset<10
     // Evaluate runtime filters and conjuncts. Short-circuit the evaluation if
     // the filters/conjuncts are empty to avoid function calls.
     if (!EvalRuntimeFilters(reinterpret_cast<TupleRow*>(output_row))) {
+      i++;
       continue;
     }
     if (!ExecNode::EvalConjuncts(conjunct_evals, num_conjuncts,
         reinterpret_cast<TupleRow*>(output_row))) {
+      i++;
       continue;
     }
     // Row survived runtime filters and conjuncts.
