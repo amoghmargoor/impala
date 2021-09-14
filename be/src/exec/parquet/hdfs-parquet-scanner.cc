@@ -2152,7 +2152,8 @@ Status HdfsParquetScanner::AssembleRows(
       batches[0].end = scratch_batch_->capacity - 1;
       batches[0].length = scratch_batch_->capacity;
       Status fill_status = FillScratchBatch(column_readers, row_batch, skip_row_group,
-        scratch_batch_->tuple_mem, batches, 1, scratch_batch_->num_tuples);
+        scratch_batch_->tuple_mem, batches, 1, scratch_batch_->capacity,
+        scratch_batch_->num_tuples);
       if (!fill_status.ok()) {
         return fill_status; 
       }
@@ -2169,7 +2170,8 @@ Status HdfsParquetScanner::AssembleRows(
       batches[0].end = scratch_batch_->capacity - 1;
       batches[0].length = scratch_batch_->capacity;
       Status fill_status = FillScratchBatch(filter_readers, row_batch, skip_row_group,
-        scratch_batch_->tuple_mem, batches, 1, scratch_batch_->num_tuples);
+        scratch_batch_->tuple_mem, batches, 1, scratch_batch_->capacity,
+        scratch_batch_->num_tuples);
       if (!fill_status.ok()) {
         return fill_status;
       }
@@ -2177,12 +2179,14 @@ Status HdfsParquetScanner::AssembleRows(
       std::bitset<1024> selected_rows;
       int num_row_to_commit = TransferScratchTuples(row_batch, selected_rows);
       if (num_row_to_commit == 0) {
-        // all of the rows are filtered out
-        // skip reading for rest of the non-filter column readers now.
-        for (int c = 0; c < non_filter_readers.size(); ++c) {
-          ParquetColumnReader* col_reader = non_filter_readers[c];
-          if (UNLIKELY(!col_reader->SkipTopLevelRows(scratch_batch_->num_tuples))) {
-            return Status(Substitute("Couldn't skip rows in file $0.", filename()));
+        if (LIKELY(scratch_batch_->num_tuples != 0)) {
+          // all of the rows are filtered out
+          // skip reading for rest of the non-filter column readers now.
+          for (int c = 0; c < non_filter_readers.size(); ++c) {
+            ParquetColumnReader* col_reader = non_filter_readers[c];
+            if (UNLIKELY(!col_reader->SkipTopLevelRows(scratch_batch_->num_tuples))) {
+              return Status(Substitute("Couldn't skip rows in file $0.", filename()));
+            }
           }
         }
       } else {
@@ -2192,7 +2196,7 @@ Status HdfsParquetScanner::AssembleRows(
         int num_tuples;
         Status fill_status = FillScratchBatch(non_filter_readers, row_batch, skip_row_group,
           reinterpret_cast<uint8_t*>(output_row_start), micro_batches, num_micro_batches,
-          num_tuples);
+          scratch_batch_->num_tuples, num_tuples);
         if (!fill_status.ok()) {
           return fill_status;
         }
@@ -2252,8 +2256,9 @@ Status HdfsParquetScanner::FillScratchBatch(const vector<ParquetColumnReader*>& 
     uint8_t* tuple_mem,
     const ScratchMicroBatch* micro_batches,
     int num_micro_batches,
+    int max_num_tuples,
     int& num_tuples) {
-      // Materialize the top-level slots into the scratch batch column-by-column.
+    // Materialize the top-level slots into the scratch batch column-by-column.
     int last_num_tuples = -1;
     for (int c = 0; c < column_readers.size(); ++c) {
       ParquetColumnReader* col_reader = column_readers[c];
@@ -2262,7 +2267,7 @@ Status HdfsParquetScanner::FillScratchBatch(const vector<ParquetColumnReader*>& 
       for (int r = 0; r < num_micro_batches; r++) {
         if (r == 0) {
           if (micro_batches[0].start > 0) {
-            if (UNLIKELY(!col_reader->SkipTopLevelRows(micro_batches[r].start))) {
+            if (UNLIKELY(!col_reader->SkipTopLevelRows(micro_batches[0].start))) {
               return Status(Substitute("Couldn't skip rows in file $0.", filename()));
             }
           }
@@ -2283,8 +2288,8 @@ Status HdfsParquetScanner::FillScratchBatch(const vector<ParquetColumnReader*>& 
         }
         last = micro_batches[r].end;
       }
-      if (UNLIKELY(last < 1023)) {
-        if (UNLIKELY(!col_reader->SkipTopLevelRows(1023 - last))) {
+      if (UNLIKELY(last < max_num_tuples - 1)) {
+        if (UNLIKELY(!col_reader->SkipTopLevelRows(max_num_tuples - 1 - last))) {
           return Status(Substitute("Couldn't skip rows in file $0.", filename()));
         }
       }
