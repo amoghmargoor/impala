@@ -157,10 +157,10 @@ void CollectionColumnReader::UpdateDerivedState() {
   }
 }
 
-bool CollectionColumnReader::SkipTopLevelRows(int64_t num_rows) {
+bool CollectionColumnReader::SkipRows(int64_t num_rows) {
   DCHECK(!children_.empty());
   for (int c = 0; c < children_.size(); ++c) {
-    if (!children_[c]->SkipTopLevelRows(num_rows)) return false;
+    if (!children_[c]->SkipRows(num_rows)) return false;
   }
   UpdateDerivedState();
   return true;
