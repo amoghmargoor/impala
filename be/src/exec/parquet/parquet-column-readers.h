@@ -494,13 +494,21 @@ class BaseScalarColumnReader : public ParquetColumnReader {
   }
 
   virtual bool SetRowGroupAtEnd() override {
-    if (num_buffered_values_ != 0) {
-      return false;
+    if (RowGroupAtEnd()) {
+      return true;
     }
-    rep_level_ = ParquetLevel::ROW_GROUP_END;
-    def_level_ = ParquetLevel::ROW_GROUP_END;
-    pos_current_value_ = ParquetLevel::INVALID_POS;
-    return true;
+    if (num_buffered_values_ == 0) {
+      NextPage();
+    }
+    if (DoesPageFiltering() && RowsRemainingInCandidateRange() == 0) {
+      if (max_rep_level() == 0 || rep_levels_.PeekLevel() == 0) {
+        if (!IsLastCandidateRange()) AdvanceCandidateRange();
+        if (!PageHasRemainingCandidateRows()) {
+          JumpToNextPage();
+        }
+      }
+    }
+    return parent_->parse_status_.ok() && RowGroupAtEnd();
   }
 
   /// Skip values in the page data. Returns true on success, false otherwise.

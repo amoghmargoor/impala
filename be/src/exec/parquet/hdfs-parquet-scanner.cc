@@ -2209,6 +2209,9 @@ Status HdfsParquetScanner::AssembleRows(
             return Status(Substitute("Could not move to RowGroup end in file $0.",
               filename()));
           }
+          // if (!col_reader->RowGroupAtEnd()) {
+          //   col_reader->NextLevels();
+          // }
         }
       }
       RETURN_IF_ERROR(CheckPageFiltering());
