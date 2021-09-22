@@ -110,7 +110,9 @@ HdfsParquetScanner::HdfsParquetScanner(HdfsScanNodeBase* scan_node, RuntimeState
     parquet_compressed_page_size_counter_(nullptr),
     parquet_uncompressed_page_size_counter_(nullptr),
     coll_items_read_counter_(0),
-    page_index_(this) {
+    page_index_(this),
+    materialization_threshold_(
+      state->query_options().parquet_materialization_threshold) {
   assemble_rows_timer_.Stop();
 }
 
@@ -2142,8 +2144,8 @@ Status HdfsParquetScanner::AssembleRows(
     RETURN_IF_ERROR(scratch_batch_->Reset(state_));
     InitTupleBuffer(template_tuple_, scratch_batch_->tuple_mem, scratch_batch_->capacity);
 
-    // Check if filter_readers exist
-    if (filter_readers.empty() || non_filter_readers.empty()) {
+    // Check if filter_readers exist or late materilization is disabled 
+    if (filter_readers.empty() || non_filter_readers.empty() || materialization_threshold_ < 0) {
       // Old logic
       ScratchMicroBatch batches[1];
       batches[0].start = 0;
@@ -2162,7 +2164,10 @@ Status HdfsParquetScanner::AssembleRows(
       RETURN_IF_ERROR(CommitRows(row_batch, num_row_to_commit));
       if (row_batch->AtCapacity()) break;
     } else {
-      // New Logic
+      // Late Materilization
+      // 1. Filter rows only materializing the columns in 'filter_readers'
+      // 2. Transfer the surviving rows
+      // 3. Materilize rest of the columns only for surviving rows.
       ScratchMicroBatch batches[1];
       batches[0].start = 0;
       batches[0].end = scratch_batch_->capacity - 1;
@@ -2191,7 +2196,7 @@ Status HdfsParquetScanner::AssembleRows(
       } else {
         Tuple* output_row_start = row_batch->GetRow(row_batch->num_rows())->GetTuple(0);
         ScratchMicroBatch micro_batches[scratch_batch_->capacity];
-        int num_micro_batches = ConvertToRange(selected_rows, micro_batches, 10);
+        int num_micro_batches = ConvertToRange(selected_rows, micro_batches, materialization_threshold_);
         int num_tuples;
         Status fill_status = FillScratchBatch(non_filter_readers, row_batch,
             skip_row_group, reinterpret_cast<uint8_t*>(output_row_start), micro_batches,
@@ -2262,6 +2267,9 @@ Status HdfsParquetScanner::FillScratchBatch(
     const vector<ParquetColumnReader*>& column_readers, RowBatch* row_batch,
     bool* skip_row_group, uint8_t* tuple_mem, const ScratchMicroBatch* micro_batches,
     int num_micro_batches, int max_num_tuples, int& num_tuples) {
+  if (UNLIKELY(num_micro_batches < 1)) {
+    return Status(Substitute("Number of batches is $0, less than 1", num_micro_batches));
+  }
   // Materialize the top-level slots into the scratch batch column-by-column.
   int last_num_tuples[num_micro_batches];
   for (int c = 0; c < column_readers.size(); ++c) {

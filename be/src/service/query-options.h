@@ -260,7 +260,9 @@ typedef std::unordered_map<string, beeswax::TQueryOptionLevel::type>
   QUERY_OPT_FN(parquet_bloom_filter_write, PARQUET_BLOOM_FILTER_WRITE,\
       TQueryOptionLevel::ADVANCED)\
   QUERY_OPT_FN(orc_read_statistics, ORC_READ_STATISTICS,\
-      TQueryOptionLevel::ADVANCED)
+      TQueryOptionLevel::ADVANCED)\
+  QUERY_OPT_FN(parquet_materialization_threshold, PARQUET_MATERIALIZATION_THRESHOLD,\
+      TQueryOptionLevel::ADVANCED)\
   ;
 
 /// Enforce practical limits on some query options to avoid undesired query state.

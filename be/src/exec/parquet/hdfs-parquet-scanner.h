@@ -556,6 +556,8 @@ class HdfsParquetScanner : public HdfsColumnarScanner {
 
   ParquetPageIndex page_index_;
 
+  int32_t materialization_threshold_;
+
   const char* filename() const { return metadata_range_->file(); }
 
   virtual Status GetNextInternal(RowBatch* row_batch) WARN_UNUSED_RESULT;
