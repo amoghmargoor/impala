@@ -1134,6 +1134,64 @@ Status BaseScalarColumnReader::ReadDataPage() {
   return Status::OK();
 }
 
+Status BaseScalarColumnReader::ReadNextPageHeader() {
+  // We're about to move to the next data page. The previous data page is
+  // now complete, free up any memory allocated for it. If the data page contained
+  // strings we need to attach it to the returned batch.
+  col_chunk_reader_.ReleaseResourcesOfLastPage(parent_->scratch_batch_->aux_mem_pool);
+
+  DCHECK_EQ(num_buffered_values_, 0);
+  if ((DoesPageFiltering() && candidate_page_idx_ == candidate_data_pages_.size() - 1)
+      || num_values_read_ == metadata_->num_values) {
+    // No more pages to read
+    // TODO: should we check for stream_->eosr()?
+    return Status::OK();
+  } else if (num_values_read_ > metadata_->num_values) {
+    RETURN_IF_ERROR(LogCorruptNumValuesInMetadataError());
+    return Status::OK();
+  }
+
+  bool eos;
+  int data_size;
+  RETURN_IF_ERROR(col_chunk_reader_.ReadNextDataPage<false>(&eos, &data_, &data_size));
+  if (eos) return HandleTooEarlyEos();
+  const parquet::PageHeader& current_page_header = col_chunk_reader_.CurrentPageHeader();
+  int num_values = current_page_header.data_page_header.num_values;
+  if (num_values < 0) {
+    return Status(Substitute("Error reading data page in Parquet file '$0'. "
+                             "Invalid number of values in metadata: $1",
+        filename(), num_values));
+  }
+  num_buffered_values_ = num_values;
+  num_values_read_ += num_buffered_values_;
+  if (parent_->candidate_ranges_.empty()) COUNTER_ADD(parent_->num_pages_counter_, 1);
+  return Status::OK();
+}
+
+Status BaseScalarColumnReader::ReadCurrentDataPage() {
+  int data_size;
+  RETURN_IF_ERROR(col_chunk_reader_.ReadDataPageData(&data_, &data_size));
+  data_end_ = data_ + data_size;
+  const parquet::PageHeader& current_page_header = col_chunk_reader_.CurrentPageHeader();
+  /// TODO: Move the level decoder initialisation to ParquetPageReader to abstract away
+  /// the differences between Parquet header V1 and V2.
+  // Initialize the repetition level data
+  RETURN_IF_ERROR(rep_levels_.Init(filename(),
+      &current_page_header.data_page_header.repetition_level_encoding,
+      parent_->perm_pool_.get(), parent_->state_->batch_size(), max_rep_level(), &data_,
+      &data_size));
+  // Initialize the definition level data
+  RETURN_IF_ERROR(def_levels_.Init(filename(),
+      &current_page_header.data_page_header.definition_level_encoding,
+      parent_->perm_pool_.get(), parent_->state_->batch_size(), max_def_level(), &data_,
+      &data_size));
+  // Data can be empty if the column contains all NULLs
+  RETURN_IF_ERROR(InitDataPage(data_, data_size));
+  // Skip rows if needed.
+  RETURN_IF_ERROR(StartPageFiltering());
+  return Status::OK();
+}
+
 template <bool ADVANCE_REP_LEVEL>
 bool BaseScalarColumnReader::NextLevels() {
   if (!ADVANCE_REP_LEVEL) DCHECK_EQ(max_rep_level(), 0) << slot_desc()->DebugString();
@@ -1215,33 +1273,16 @@ Status BaseScalarColumnReader::StartPageFiltering() {
   return Status::OK();
 }
 
-template <bool MULTI_PAGE>
-bool BaseScalarColumnReader::SkipTopLevelRows(int64_t total_num_rows) {
-  DCHECK_GT(total_num_rows, 0);
-  int64_t num_rows;
-  int64_t remaining;
-  if (MULTI_PAGE) {
-    if (num_buffered_values_ == 0) {
-      if (!NextPage()) {
-        return false;
-      }
-    }
-    num_rows = std::min(total_num_rows, ((int64_t)num_buffered_values_));
-    remaining = total_num_rows - num_rows;
-  } else {
-    DCHECK_GT(num_buffered_values_, 0);
-    num_rows = total_num_rows;
-    remaining = 0;
-  }
+bool BaseScalarColumnReader::SkipTopLevelRows(int64_t num_rows) {
+  DCHECK_GT(num_rows, 0);
+  DCHECK_GT(num_buffered_values_, 0);
   DCHECK_GE(num_buffered_values_, num_rows);
   // Fastest path: field is required and not nested.
   // So row count equals value count, and every value is stored in the page data.
   if (max_def_level() == 0 && max_rep_level() == 0) {
     current_row_ += num_rows;
     num_buffered_values_ -= num_rows;
-    bool skip_status = SkipEncodedValuesInPage(num_rows);
-    return remaining == 0 ? skip_status :
-                            skip_status && SkipTopLevelRows<MULTI_PAGE>(remaining);
+    return SkipEncodedValuesInPage(num_rows);
   }
   int64_t num_values_to_skip = 0;
   if (max_rep_level() == 0) {
@@ -1289,9 +1330,58 @@ bool BaseScalarColumnReader::SkipTopLevelRows(int64_t total_num_rows) {
       }
     }
   }
-  bool skip_status = SkipEncodedValuesInPage(num_values_to_skip);
-  return remaining == 0 ? skip_status :
-                          skip_status && SkipTopLevelRows<MULTI_PAGE>(remaining);
+  return SkipEncodedValuesInPage(num_values_to_skip);
+}
+
+/// Wrapper around 'SkipTopLevelRows' to skip across multiple pages.
+bool BaseScalarColumnReader::SkipRows(int64_t num_rows, int64_t skip_row_id) {
+  if (DoesPageFiltering() && skip_row_id > 0) {
+    if (skip_row_id > LastRowIdxInCurrentPage()) {
+      if (!JumpNextPageHeader()) {
+        return false;
+      }
+    }
+    while (skip_row_id > LastRowIdxInCurrentPage()) {
+      if (!col_chunk_reader_.SkipPageData().ok() || !JumpNextPageHeader()) {
+        return false;
+      }
+    }
+    int first_row_id = FirstRowIdxInCurrentPage();
+    DCHECK_GE(skip_row_id, first_row_id);
+    current_row_ = first_row_id - 1;
+    Status page_read = ReadCurrentDataPage();
+    return page_read.ok() && SkipTopLevelRows(skip_row_id - current_row_);
+  } else {
+    DCHECK_GT(num_rows, 0);
+    if (num_buffered_values_ == 0) {
+      if (!NextPage()) {
+        return false;
+      }
+    }
+    int num_skip_rows = std::min(num_rows, ((int64_t)num_buffered_values_));
+    int remaining = num_rows - num_skip_rows;
+    return remaining == 0 ?
+        SkipTopLevelRows(num_skip_rows) :
+        SkipTopLevelRows(num_skip_rows) && SkipRows(remaining, skip_row_id);
+  }
+}
+
+bool BaseScalarColumnReader::SetRowGroupAtEnd() {
+  if (RowGroupAtEnd()) {
+    return true;
+  }
+  if (num_buffered_values_ == 0) {
+    NextPage();
+  }
+  if (DoesPageFiltering() && RowsRemainingInCandidateRange() == 0) {
+    if (max_rep_level() == 0 || rep_levels_.PeekLevel() == 0) {
+      if (!IsLastCandidateRange()) AdvanceCandidateRange();
+      if (!PageHasRemainingCandidateRows()) {
+        JumpToNextPage();
+      }
+    }
+  }
+  return parent_->parse_status_.ok() && RowGroupAtEnd();
 }
 
 int BaseScalarColumnReader::FillPositionsInCandidateRange(int rows_remaining,
@@ -1386,6 +1476,21 @@ Status BaseScalarColumnReader::HandleTooEarlyEos() {
 bool BaseScalarColumnReader::NextPage() {
   parent_->assemble_rows_timer_.Stop();
   parent_->parse_status_ = ReadDataPage();
+  if (UNLIKELY(!parent_->parse_status_.ok())) return false;
+  if (num_buffered_values_ == 0) {
+    rep_level_ = ParquetLevel::ROW_GROUP_END;
+    def_level_ = ParquetLevel::ROW_GROUP_END;
+    pos_current_value_ = ParquetLevel::INVALID_POS;
+    return false;
+  }
+  parent_->assemble_rows_timer_.Start();
+  return true;
+}
+
+bool BaseScalarColumnReader::JumpNextPageHeader() {
+  num_buffered_values_ = 0;
+  parent_->assemble_rows_timer_.Stop();
+  parent_->parse_status_ = ReadNextPageHeader();
   if (UNLIKELY(!parent_->parse_status_.ok())) return false;
   if (num_buffered_values_ == 0) {
     rep_level_ = ParquetLevel::ROW_GROUP_END;

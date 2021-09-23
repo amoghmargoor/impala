@@ -164,14 +164,19 @@ class ParquetColumnReader {
   virtual void Close(RowBatch* row_batch) = 0;
 
   /// Skips the number of encoded values specified by 'num_rows', without materilizing or
-  /// decoding them across pages.
+  /// decoding them across pages. If page filtering is enabled, then it directly skips to
+  /// row after 'skip_row_id'.
   /// It invokes 'SkipToLevelRows' for all 'children_'.
   /// Returns true on success, false otherwise.
-  virtual bool SkipRows(int64_t num_rows) = 0;
+  virtual bool SkipRows(int64_t num_rows, int64_t skip_row_id) = 0;
 
   /// Sets to row group end. 'rep_level_' and 'def_level_' is set to
   /// ParquetLevel::ROW_GROUP_END. ParquetLevel::INVALID_LEVEL
   virtual bool SetRowGroupAtEnd() = 0;
+
+  /// Returns the last processed row Id, if present.
+  /// else will return -1.
+  virtual int64_t LastProcessedRow() const { return -1; }
 
  protected:
   HdfsParquetScanner* parent_;
@@ -417,10 +422,25 @@ class BaseScalarColumnReader : public ParquetColumnReader {
   /// this function will continue reading the next data page.
   Status ReadDataPage();
 
+  /// Reads just the header of next data page. If a dictionary page is encountered,
+  /// that will be skipped and this function will continue reading header of next data
+  /// page.
+  Status ReadNextPageHeader();
+
+  /// Reads only the data page coontent and not the header.
+  /// This should strictly be called only after 'ReadNextPageHeader' or
+  /// 'JumpNextPageHeader' has been invoked.
+  Status ReadCurrentDataPage();
+
   /// Try to move the the next page and buffer more values. Return false and
   /// sets rep_level_, def_level_ and pos_current_value_ to -1 if no more pages or an
   /// error encountered.
   bool NextPage();
+
+  /// Reads just the header of next page. It would also increment 'num_buffered_values_'
+  /// based upon header. Need to invoke 'ReadCurrentDataPage' if page has rows of
+  /// interest to actually buffer the values.
+  bool JumpNextPageHeader();
 
   /// Implementation for NextLevels().
   template <bool ADVANCE_REP_LEVEL>
@@ -477,8 +497,7 @@ class BaseScalarColumnReader : public ParquetColumnReader {
   void CreateSubRanges(std::vector<io::ScanRange::SubRange>* sub_ranges);
 
   /// Calculates how many encoded values we need to skip in the page data,
-  /// then invokes SkipEncodedValuesInPage(). It can skip values across multiple
-  /// pages too when template parameter MULTI_PAGE is true. The number of the encoded
+  /// then invokes SkipEncodedValuesInPage(). The number of the encoded
   /// values depends on the nesting of the data, and also on the number of null values.
   /// E.g. if 'num_rows' is 10, and every row contains an array of 10 integers, then
   /// we need to skip 100 encoded values in the page data.
@@ -486,31 +505,12 @@ class BaseScalarColumnReader : public ParquetColumnReader {
   /// 5 values in the page data since NULL values are not stored there.
   /// The number of primitive values can be calculated from the def and rep levels.
   /// Returns true on success, false otherwise.
-  template <bool MULTI_PAGE = false>
   bool SkipTopLevelRows(int64_t num_rows);
 
   /// Wrapper around 'SkipTopLevelRows' to skip across multiple pages.
-  virtual bool SkipRows(int64_t num_rows) override {
-    return SkipTopLevelRows<true>(num_rows);
-  }
+  virtual bool SkipRows(int64_t num_rows, int64_t skip_row_id) override;
 
-  virtual bool SetRowGroupAtEnd() override {
-    if (RowGroupAtEnd()) {
-      return true;
-    }
-    if (num_buffered_values_ == 0) {
-      NextPage();
-    }
-    if (DoesPageFiltering() && RowsRemainingInCandidateRange() == 0) {
-      if (max_rep_level() == 0 || rep_levels_.PeekLevel() == 0) {
-        if (!IsLastCandidateRange()) AdvanceCandidateRange();
-        if (!PageHasRemainingCandidateRows()) {
-          JumpToNextPage();
-        }
-      }
-    }
-    return parent_->parse_status_.ok() && RowGroupAtEnd();
-  }
+  virtual bool SetRowGroupAtEnd() override;
 
   /// Skip values in the page data. Returns true on success, false otherwise.
   virtual bool SkipEncodedValuesInPage(int64_t num_values) = 0;
@@ -523,6 +523,18 @@ class BaseScalarColumnReader : public ParquetColumnReader {
         candidate_data_pages_[candidate_page_idx_]].first_row_index;
   }
 
+  int64_t LastRowIdxInCurrentPage() const {
+    DCHECK(!candidate_data_pages_.empty());
+    if (current_row_range_ == parent_->candidate_ranges_.size() - 1) {
+      parquet::RowGroup& row_group =
+          parent_->file_metadata_.row_groups[parent_->row_group_idx_];
+      return row_group.num_rows - 1;
+    } else {
+      return offset_index_.page_locations[candidate_data_pages_[candidate_page_idx_ + 1]]
+                 .first_row_index
+          - 1;
+    }
+  }
   /// The number of top-level rows until the end of the current candidate range.
   /// For simple columns it returns 0 if we have processed the last row in the current
   /// range. For nested columns, it returns 0 when we are processing values from the last

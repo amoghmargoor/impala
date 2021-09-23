@@ -78,7 +78,7 @@ class CollectionColumnReader : public ParquetColumnReader {
   /// Skips the number of encoded values specified by 'num_rows', without materilizing or
   /// decoding them.
   /// Returns true on success, false otherwise.
-  virtual bool SkipRows(int64_t num_rows) override;
+  virtual bool SkipRows(int64_t num_rows, int64_t skip_row_id) override;
 
   virtual bool SetRowGroupAtEnd() override {
     DCHECK(!children_.empty());

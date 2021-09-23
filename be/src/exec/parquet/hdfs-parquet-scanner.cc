@@ -2139,6 +2139,8 @@ Status HdfsParquetScanner::AssembleRows(
   DCHECK(scratch_batch_ != nullptr);
 
   int64_t num_rows_read = 0;
+  int64_t num_rows_to_skip = 0;
+  int64_t last_row_id_processed = -1;
   while (!column_readers[0]->RowGroupAtEnd()) {
     // Start a new scratch batch.
     RETURN_IF_ERROR(scratch_batch_->Reset(state_));
@@ -2159,7 +2161,7 @@ Status HdfsParquetScanner::AssembleRows(
       }
       RETURN_IF_ERROR(CheckPageFiltering());
       num_rows_read += scratch_batch_->num_tuples;
-      bool selected_rows[scratch_batch_->num_tuples];
+      bool selected_rows[scratch_batch_->capacity];
       int num_row_to_commit = TransferScratchTuples(row_batch, selected_rows);
       RETURN_IF_ERROR(CommitRows(row_batch, num_row_to_commit));
       if (row_batch->AtCapacity()) break;
@@ -2180,20 +2182,28 @@ Status HdfsParquetScanner::AssembleRows(
       }
       num_rows_read += scratch_batch_->num_tuples;
       bool row_end = filter_readers_[0]->RowGroupAtEnd();
-      bool selected_rows[scratch_batch_->num_tuples];
+      bool selected_rows[scratch_batch_->capacity];
       int num_row_to_commit = TransferScratchTuples(row_batch, selected_rows);
       if (num_row_to_commit == 0) {
-        if (LIKELY(scratch_batch_->num_tuples != 0)) {
-          // all of the rows are filtered out
+        // Collect the rows to skip, so that we can skip them together to avoid
+        // decompression and decoding. This ensure compressed pages that don't
+        // have any rows of interest are skiped without decompression.
+        num_rows_to_skip += scratch_batch_->num_tuples;
+        last_row_id_processed = filter_readers_[0]->LastProcessedRow();
+      } else {
+        if (num_rows_to_skip > 0) {
           // skip reading for rest of the non-filter column readers now.
           for (int c = 0; c < non_filter_readers.size(); ++c) {
             ParquetColumnReader* col_reader = non_filter_readers[c];
-            if (UNLIKELY(!col_reader->SkipRows(scratch_batch_->num_tuples))) {
+            if (UNLIKELY(
+                    !col_reader->SkipRows(num_rows_to_skip, last_row_id_processed))) {
               return Status(Substitute("Couldn't skip rows in file $0.", filename()));
             }
           }
+          num_rows_to_skip = 0;
+          last_row_id_processed = -1;
         }
-      } else {
+
         Tuple* output_row_start = row_batch->GetRow(row_batch->num_rows())->GetTuple(0);
         ScratchMicroBatch micro_batches[scratch_batch_->capacity];
         int num_micro_batches = ConvertToRange(selected_rows, micro_batches, materialization_threshold_);
@@ -2279,12 +2289,12 @@ Status HdfsParquetScanner::FillScratchBatch(
     for (int r = 0; r < num_micro_batches; r++) {
       if (r == 0) {
         if (micro_batches[0].start > 0) {
-          if (UNLIKELY(!col_reader->SkipRows(micro_batches[0].start))) {
+          if (UNLIKELY(!col_reader->SkipRows(micro_batches[0].start, -1))) {
             return Status(Substitute("Couldn't skip rows in file $0.", filename()));
           }
         }
       } else {
-        if (UNLIKELY(!col_reader->SkipRows(micro_batches[r].start - last - 1))) {
+        if (UNLIKELY(!col_reader->SkipRows(micro_batches[r].start - last - 1, -1))) {
           return Status(Substitute("Couldn't skip rows in file $0.", filename()));
         }
       }
@@ -2317,7 +2327,7 @@ Status HdfsParquetScanner::FillScratchBatch(
       last_num_tuples[r] = num_tuples;
     }
     if (UNLIKELY(last < max_num_tuples - 1)) {
-      if (UNLIKELY(!col_reader->SkipRows(max_num_tuples - 1 - last))) {
+      if (UNLIKELY(!col_reader->SkipRows(max_num_tuples - 1 - last, -1))) {
         return Status(Substitute("Couldn't skip rows in file $0.", filename()));
       }
     }
