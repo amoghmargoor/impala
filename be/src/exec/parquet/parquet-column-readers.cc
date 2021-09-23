@@ -1340,6 +1340,10 @@ bool BaseScalarColumnReader::SkipRows(int64_t num_rows, int64_t skip_row_id) {
       if (!JumpNextPageHeader()) {
         return false;
       }
+    } else {
+      DCHECK_LE(FirstRowIdxInCurrentPage(), current_row_);
+      DCHECK_LT(current_row_, skip_row_id);
+      return SkipTopLevelRows(skip_row_id - current_row_);
     }
     while (skip_row_id > LastRowIdxInCurrentPage()) {
       if (!col_chunk_reader_.SkipPageData().ok() || !JumpNextPageHeader()) {

@@ -2216,6 +2216,18 @@ Status HdfsParquetScanner::AssembleRows(
         }
       }
       if (row_end) {
+        if (num_rows_to_skip > 0) {
+          // skip reading for rest of the non-filter column readers now.
+          for (int c = 0; c < non_filter_readers.size(); ++c) {
+            ParquetColumnReader* col_reader = non_filter_readers[c];
+            if (UNLIKELY(
+                    !col_reader->SkipRows(num_rows_to_skip, last_row_id_processed))) {
+              return Status(Substitute("Couldn't skip rows in file $0.", filename()));
+            }
+          }
+          num_rows_to_skip = 0;
+          last_row_id_processed = -1;
+        }
         for (int c = 0; c < non_filter_readers.size(); ++c) {
           ParquetColumnReader* col_reader = non_filter_readers[c];
           if (UNLIKELY(!col_reader->SetRowGroupAtEnd())) {
