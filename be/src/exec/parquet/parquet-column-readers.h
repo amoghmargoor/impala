@@ -265,7 +265,7 @@ class BaseScalarColumnReader : public ParquetColumnReader {
 
   virtual ~BaseScalarColumnReader() {}
 
-  virtual bool IsCollectionReader() const { return false; }
+  virtual bool IsCollectionReader() const override { return false; }
 
   /// Resets the reader for each row group in the file and creates the scan
   /// range for the column, but does not start it. To start scanning,
@@ -287,7 +287,7 @@ class BaseScalarColumnReader : public ParquetColumnReader {
     return Status::OK();
   }
 
-  virtual void Close(RowBatch* row_batch);
+  virtual void Close(RowBatch* row_batch) override;
 
   io::ScanRange* scan_range() const { return col_chunk_reader_.scan_range(); }
   int64_t total_len() const { return metadata_->total_compressed_size; }
@@ -300,7 +300,7 @@ class BaseScalarColumnReader : public ParquetColumnReader {
 
   /// Reads the next definition and repetition levels for this column. Initializes the
   /// next data page if necessary.
-  virtual bool NextLevels() { return NextLevels<true>(); }
+  virtual bool NextLevels() override { return NextLevels<true>(); }
 
   /// Check the data stream to see if there is a dictionary page. If there is,
   /// use that page to initialize dict_decoder_ and advance the data stream
