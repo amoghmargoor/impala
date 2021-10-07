@@ -2216,6 +2216,7 @@ Status HdfsParquetScanner::AssembleRows(RowBatch* row_batch, bool* skip_row_grou
   int64_t num_rows_read = 0;
   int64_t num_rows_to_skip = 0;
   int64_t last_row_id_processed = -1;
+  bool selected_rows[scratch_batch_->capacity];
   while (!column_readers_[0]->RowGroupAtEnd()) {
     // Start a new scratch batch.
     RETURN_IF_ERROR(scratch_batch_->Reset(state_));
@@ -2233,7 +2234,6 @@ Status HdfsParquetScanner::AssembleRows(RowBatch* row_batch, bool* skip_row_grou
     }
     num_rows_read += scratch_batch_->num_tuples;
     bool row_end = filter_readers_[0]->RowGroupAtEnd();
-    bool selected_rows[scratch_batch_->capacity];
     int num_row_to_commit = FilterScratchBatch(row_batch, selected_rows);
     if (num_row_to_commit == 0) {
       // Collect the rows to skip, so that we can skip them together to avoid
