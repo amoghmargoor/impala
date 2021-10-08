@@ -18,6 +18,7 @@
 #ifndef IMPALA_EXEC_PARQUET_SCRATCH_TUPLE_BATCH_H
 #define IMPALA_EXEC_PARQUET_SCRATCH_TUPLE_BATCH_H
 
+#include <boost/scoped_array.h>
 #include "runtime/descriptors.h"
 #include "runtime/row-batch.h"
 #include "runtime/tuple-row.h"
@@ -161,17 +162,16 @@ struct ScratchTupleBatch {
   /// Bits set in 'selected_rows' are the rows that needs to be scanned.
   /// Consecutive bits set are used to create ranges. Ranges that differ by less than
   /// 'skip_length', are merged together. E.g., for ranges 1-8, 11-20, 35-100 derived
-  /// from 'scratch_batch_->selected_rows' and 'skip_length' as 10, first two ranges
-  /// would be merged into 1-20 as they differ by 3 (11 - 8) which is less than 10
-  /// ('skip_length'). Precondition for the function is there is atleast one microbatch
-  /// present i.e., atleast one of the 'selected_rows' is true.
+  /// from 'selected_rows' and 'skip_length' as 10, first two ranges would be merged
+  /// into 1-20 as they differ by 3 (11 - 8) which is less than 10 ('skip_length').
+  /// Precondition for the function is there is atleast one micro batch present i.e.,
+  /// atleast one of the 'selected_rows' is true.
   int GetMicroBatches(ScratchMicroBatch* batches, int skip_length) {
     int range = 0;
     int start = -1;
     int last = -1;
-    const int batch_size = scratch_batch_->num_tuples;
     DCHECK_GT(batch_size, 0);
-    for (size_t i = 0; i < batch_size; ++i) {
+    for (size_t i = 0; i < num_tuples; ++i) {
       if (selected_rows[i]) {
         if (start == -1) {
           // start the first ever range
@@ -191,7 +191,7 @@ struct ScratchTupleBatch {
         }
       }
     }
-    /// ensure atleast one values above was true.
+    /// ensure atleast one of 'selected_rows' is true.
     DCHECK(start != -1) << "Atleast one of the 'scratch_batch_->selected_rows'"
                         << "should be true";
     /// Add the last range which was being built.
