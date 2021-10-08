@@ -18,12 +18,19 @@
 #ifndef IMPALA_EXEC_PARQUET_SCRATCH_TUPLE_BATCH_H
 #define IMPALA_EXEC_PARQUET_SCRATCH_TUPLE_BATCH_H
 
-#include <boost/scoped_array.h>
+#include <boost/scoped_array.hpp>
 #include "runtime/descriptors.h"
 #include "runtime/row-batch.h"
 #include "runtime/tuple-row.h"
 
 namespace impala {
+
+/// Helper struct that represents a micro batch within 'ScratchTupleBatch'.
+struct ScratchMicroBatch {
+  int start;
+  int end;
+  int length;
+};
 
 /// Helper struct that holds a batch of tuples allocated from a mem pool, as well
 /// as state associated with iterating over its tuples and transferring
@@ -71,7 +78,8 @@ struct ScratchTupleBatch {
     : capacity(batch_size),
       tuple_byte_size(row_desc.GetRowSize()),
       tuple_mem_pool(mem_tracker),
-      aux_mem_pool(mem_tracker) {
+      aux_mem_pool(mem_tracker),
+      selected_rows(new bool[batch_size]) {
     DCHECK_EQ(row_desc.tuple_descriptors().size(), 1);
   }
 
@@ -170,7 +178,7 @@ struct ScratchTupleBatch {
     int range = 0;
     int start = -1;
     int last = -1;
-    DCHECK_GT(batch_size, 0);
+    DCHECK_GT(num_tuples, 0);
     for (size_t i = 0; i < num_tuples; ++i) {
       if (selected_rows[i]) {
         if (start == -1) {
@@ -214,11 +222,6 @@ struct ScratchTupleBatch {
   int64_t total_allocated_bytes() const {
     return tuple_mem_pool.total_allocated_bytes() + aux_mem_pool.total_allocated_bytes();
   }
-};
-struct ScratchMicroBatch {
-  int start;
-  int end;
-  int length;
 };
 }
 

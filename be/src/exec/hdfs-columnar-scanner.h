@@ -49,7 +49,7 @@ class HdfsColumnarScanner : public HdfsScanner {
   /// top-level tuples. See AssembleRows() in the derived classes.
   boost::scoped_ptr<ScratchTupleBatch> scratch_batch_;
 
-  typedef int (*ProcessScratchBatchFn)(HdfsColumnarScanner*, RowBatch*, bool*);
+  typedef int (*ProcessScratchBatchFn)(HdfsColumnarScanner*, RowBatch*);
   /// The codegen'd version of ProcessScratchBatch() if available, NULL otherwise.
   /// Function type: ProcessScratchBatchFn
   const CodegenFnPtrBase* codegend_process_scratch_batch_fn_ = nullptr;

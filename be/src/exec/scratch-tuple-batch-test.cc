@@ -59,9 +59,9 @@ class ScratchTupleBatchTest : public testing::Test {
 };
 
 // This tests checks conversion of 'selected_rows' to 'ScratchMicroBatch';
-TEST_F(ScratchTupleBatchTest, GetMicroBatch) {
+TEST_F(ScratchTupleBatchTest, TestGetMicroBatches) {
   const int BATCH_SIZE = 1024;
-  scoped_ptr scratch_batch(new ScratchTupleBatch(desc_, BATCH_SIZE, &tracker_));
+  scoped_ptr<ScratchTupleBatch> scratch_batch(new ScratchTupleBatch(*desc_, BATCH_SIZE, &tracker_));
   scratch_batch->num_tuples = BATCH_SIZE;
   // set every 16th row as selected.
   for (int batch_idx = 0; batch_idx < 1024; ++batch_idx) {
@@ -70,14 +70,14 @@ TEST_F(ScratchTupleBatchTest, GetMicroBatch) {
   // Creates just one micro batch as skip length is bigger than 16 (gap between any
   // two consecutive true values).
   ScratchMicroBatch micro_batches[BATCH_SIZE];
-  EXPECT_EQ(scratch_batch->GetMicroBatch(micro_batches, 20 /*Skip Length*/), 1);
-  EXPECT_EQ(micro_batches[0].start, 0)
-  EXPECT_EQ(micro_batches[0].end, 1023);
-  EXPECT_EQ(micro_batches[0].length, 1024);
+  EXPECT_EQ(scratch_batch->GetMicroBatches(micro_batches, 20 /*Skip Length*/), 1);
+  EXPECT_EQ(micro_batches[0].start, 0);
+  EXPECT_EQ(micro_batches[0].end, 1008);
+  EXPECT_EQ(micro_batches[0].length, 1009);
 
   // Creates one micro batch for every true value
-  EXPECT_EQ(scratch_batch->GetMicroBatch(micro_batches, 5 /*Skip Length*/), 64);
-  for (int batch_idx = 0; batch_idx < 64, ++batch_idx) {
+  EXPECT_EQ(scratch_batch->GetMicroBatches(micro_batches, 5 /*Skip Length*/), 64);
+  for (int batch_idx = 0; batch_idx < 64; ++batch_idx) {
     EXPECT_EQ(micro_batches[batch_idx].start, batch_idx * 16);
     EXPECT_EQ(micro_batches[batch_idx].end, batch_idx * 16);
     EXPECT_EQ(micro_batches[batch_idx].length, 1);

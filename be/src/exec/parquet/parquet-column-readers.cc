@@ -1553,7 +1553,7 @@ bool BaseScalarColumnReader::SkipRowsInternal(int64_t num_rows, int64_t skip_row
       DCHECK_LT(current_row_range_, candidate_row_ranges.size());
       ++current_row_range_;
     }
-    return result;
+    return true;
   } else if (IN_COLLECTION) {
     DCHECK_GT(num_rows, 0);
     // if all the values of current page are consumed, move to next page.

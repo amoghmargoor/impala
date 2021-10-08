@@ -271,7 +271,7 @@ void HdfsParquetScanner::DivideFilterAndNonFilterColumnReaders(
 vector<SlotId> HdfsParquetScanner::GetSlotIdsForConjuncts(
     const vector<ScalarExpr*>& conjuncts) const {
   vector<SlotId> slot_ids;
-  slots_ids.reserve(conjuncts.size());
+  slot_ids.reserve(conjuncts.size());
   for (int conjunct_idx = 0; conjunct_idx < conjuncts.size(); ++conjunct_idx) {
     conjuncts[conjunct_idx]->GetSlotIds(&slot_ids);
   }
