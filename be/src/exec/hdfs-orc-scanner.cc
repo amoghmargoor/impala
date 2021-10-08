@@ -626,8 +626,7 @@ Status HdfsOrcScanner::GetNextInternal(RowBatch* row_batch) {
 
   if (!scratch_batch_->AtEnd()) {
     assemble_rows_timer_.Start();
-    bool selected_rows[scratch_batch_->capacity];
-    int num_row_to_commit = TransferScratchTuples(row_batch, selected_rows);
+    int num_row_to_commit = TransferScratchTuples(row_batch);
     assemble_rows_timer_.Stop();
     RETURN_IF_ERROR(CommitRows(num_row_to_commit, row_batch));
     if (row_batch->AtCapacity()) return Status::OK();
@@ -835,8 +834,7 @@ Status HdfsOrcScanner::TransferTuples(RowBatch* dst_batch) {
     InitTupleBuffer(template_tuple_, scratch_batch_->tuple_mem, scratch_batch_->capacity);
     RETURN_IF_ERROR(orc_root_reader_->TopLevelReadValueBatch(scratch_batch_.get(),
         &scratch_batch_->aux_mem_pool));
-    bool selected_rows[scratch_batch_->capacity];
-    int num_tuples_transferred = TransferScratchTuples(dst_batch, selected_rows);
+    int num_tuples_transferred = TransferScratchTuples(dst_batch);
     row_id += num_tuples_transferred;
     VLOG_ROW << Substitute("Transfer $0 rows from scratch batch to dst_batch ($1 rows)",
         num_tuples_transferred, dst_batch->num_rows());

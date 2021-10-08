@@ -737,8 +737,9 @@ class HdfsParquetScanner : public HdfsColumnarScanner {
 
   /// Check 'AssembleRows' for details.
   /// 'AssembleRows' implements late materialization whereas this function does not.
-  Status AssembleRowsInternal(const vector<ParquetColumnReader*>& column_readers,
-      RowBatch* row_batch, bool* skip_row_group) WARN_UNUSED_RESULT;
+  Status AssembleRowsWithoutLateMaterialization(
+      const vector<ParquetColumnReader*>& column_readers, RowBatch* row_batch,
+      bool* skip_row_group) WARN_UNUSED_RESULT;
 
   /// Commit num_rows to the given row batch.
   /// Returns OK if the query is not cancelled and hasn't exceeded any mem limits.
@@ -929,17 +930,6 @@ class HdfsParquetScanner : public HdfsColumnarScanner {
   Status FillScratchMicroBatches(const vector<ParquetColumnReader*>& column_readers,
       RowBatch* row_batch, bool* skip_row_group, const ScratchMicroBatch* micro_batches,
       int num_micro_batches, int max_num_tuples, int& num_tuples);
-
-  /// Creates ranges of microbatches that needs to be scanned.
-  /// Bits set in 'selected_rows' are the rows that needs to be scanned. Consecutive
-  /// bits set are used to create ranges. Ranges that differ by less than 'skip_length',
-  /// are merged together. E.g., for ranges 1-8, 11-20, 35-100 derived from
-  /// 'selected_rows' and 'skip_length' as 10, first two ranges would be merged into
-  /// 1-20 as they differ by 3 (11 - 8) which is less than 10 ('skip_length').
-  /// Precondition for the function is there is atleast one microbatch present i.e.,
-  /// atleast one of the selected_rows is true.
-  int ConvertToRange(
-      const bool* selected_rows, ScratchMicroBatch* batches, int skip_length);
 
   /// Partition 'column_readers' into filter and non-filter readers. All 'filter_readers'
   /// are the readers reading columns involved in either static filter or runtime filter.

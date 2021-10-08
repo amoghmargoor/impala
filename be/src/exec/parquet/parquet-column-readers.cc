@@ -1541,10 +1541,11 @@ bool BaseScalarColumnReader::SkipRowsInternal(int64_t num_rows, int64_t skip_row
     DCHECK_GE(skip_row_id, FirstRowIdxInCurrentPage());
     int64_t last_row = LastProcessedRow();
     int64_t remaining = 0;
-    bool result = true;
     // Skip to the required row id within the page.
     if (last_row < skip_row_id) {
-      result = SkipTopLevelRows(skip_row_id - last_row, remaining);
+      if (UNLIKELY(!SkipTopLevelRows(skip_row_id - last_row, remaining))) {
+        return false;
+      }
     }
     // also need to adjust 'candidate_row_ranges' as we skipped to new row id.
     auto& candidate_row_ranges = parent_->candidate_ranges_;

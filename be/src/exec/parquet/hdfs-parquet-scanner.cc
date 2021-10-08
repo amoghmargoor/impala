@@ -250,6 +250,8 @@ void HdfsParquetScanner::DivideFilterAndNonFilterColumnReaders(
     vector<ParquetColumnReader*>* filter_readers,
     vector<ParquetColumnReader*>* non_filter_readers) const {
   vector<ScalarExpr*> conjuncts;
+  conjuncts.reserve(scan_node_->conjuncts().size() +
+    scan_node_->filter_exprs().size());
   conjuncts.insert(std::end(conjuncts), std::begin(scan_node_->conjuncts()),
       std::end(scan_node_->conjuncts()));
   conjuncts.insert(std::end(conjuncts), std::begin(scan_node_->filter_exprs()),
@@ -269,6 +271,7 @@ void HdfsParquetScanner::DivideFilterAndNonFilterColumnReaders(
 vector<SlotId> HdfsParquetScanner::GetSlotIdsForConjuncts(
     const vector<ScalarExpr*>& conjuncts) const {
   vector<SlotId> slot_ids;
+  slots_ids.reserve(conjuncts.size());
   for (int conjunct_idx = 0; conjunct_idx < conjuncts.size(); ++conjunct_idx) {
     conjuncts[conjunct_idx]->GetSlotIds(&slot_ids);
   }
@@ -487,8 +490,7 @@ Status HdfsParquetScanner::GetNextInternal(RowBatch* row_batch) {
   // Transfer remaining tuples from the scratch batch.
   if (!scratch_batch_->AtEnd()) {
     assemble_rows_timer_.Start();
-    bool selected_rows[scratch_batch_->capacity];
-    int num_row_to_commit = TransferScratchTuples(row_batch, selected_rows);
+    int num_row_to_commit = TransferScratchTuples(row_batch);
     assemble_rows_timer_.Stop();
     RETURN_IF_ERROR(CommitRows(row_batch, num_row_to_commit));
     if (row_batch->AtCapacity()) return Status::OK();
@@ -2123,10 +2125,19 @@ Status HdfsParquetScanner::ProcessBloomFilter(const parquet::RowGroup&
   return Status::OK();
 }
 
-/// Check 'Assemblerows' for details.
-/// 'AssembleRows' implements late Materilization whereas
-/// this function does not.
-Status HdfsParquetScanner::AssembleRowsInternal(
+/// High-level steps of this function:
+/// 1. Allocate 'scratch' memory for tuples able to hold a full batch
+/// 2. Populate the slots of all scratch tuples one column reader at a time,
+///    using the ColumnReader::Read*ValueBatch() functions.
+/// 3. Evaluate runtime filters and conjuncts against the scratch tuples and
+///    set the surviving tuples in the output batch. Transfer the ownership of
+///    scratch memory to the output batch once the scratch memory is exhausted.
+/// 4. Repeat steps above until we are done with the row group or an error
+///    occurred.
+/// TODO: Since the scratch batch is populated in a column-wise fashion, it is
+/// difficult to maintain a maximum memory footprint without throwing away at least
+/// some work. This point needs further experimentation and thought.
+Status HdfsParquetScanner::AssembleRowsWithoutLateMaterialization(
     const vector<ParquetColumnReader*>& column_readers, RowBatch* row_batch,
     bool* skip_row_group) {
   DCHECK(!column_readers.empty());
@@ -2175,8 +2186,7 @@ Status HdfsParquetScanner::AssembleRowsInternal(
     }
     RETURN_IF_ERROR(CheckPageFiltering());
     num_rows_read += scratch_batch_->num_tuples;
-    bool selected_rows[scratch_batch_->capacity];
-    int num_row_to_commit = TransferScratchTuples(row_batch, selected_rows);
+    int num_row_to_commit = TransferScratchTuples(row_batch);
     RETURN_IF_ERROR(CommitRows(row_batch, num_row_to_commit));
     if (row_batch->AtCapacity()) break;
   }
@@ -2189,13 +2199,23 @@ Status HdfsParquetScanner::AssembleRowsInternal(
 }
 
 /// High-level steps of this function:
-/// 1. Allocate 'scratch' memory for tuples able to hold a full batch
-/// 2. Populate the slots of all scratch tuples one column reader at a time,
-///    using the ColumnReader::Read*ValueBatch() functions.
+/// 1. If late materilization is disabled or not applicable, use
+///    'AssembleRowsWithoutLateMaterialization'.
+/// 2. Allocate 'scratch' memory for tuples able to hold a full batch.
+/// 3. Populate the slots of all scratch tuples one column reader at a time only
+///    for 'filter_readers_', using the ColumnReader::Read*ValueBatch() functions.
+///    These column readers are based on columns used in conjuncts and runtime filters.
 /// 3. Evaluate runtime filters and conjuncts against the scratch tuples and
-///    set the surviving tuples in the output batch. Transfer the ownership of
-///    scratch memory to the output batch once the scratch memory is exhausted.
-/// 4. Repeat steps above until we are done with the row group or an error
+///    set the surviving tuples in the output batch.
+/// 4. If no tuples survive step 3, skip materializing tuples for 'non_filter_readers'.
+///    Instead collect the rows to be skipped and skip them later.
+/// 5. If surviving tuples are present then
+///    a. Get the micro batches to be read by 'non_filter_readers_'.
+///    b. Skip rows collected at step 4 in earlier iteration, if needed.
+///    c. Fill 'scratch' memory by reading them using 'FillScratchMicroBatches'.
+/// 6. Transfer the ownership of scratch memory to the output batch once the scratch
+///    memory is exhausted.
+/// 7. Repeat steps above until we are done with the row group or an error
 ///    occurred.
 /// TODO: Since the scratch batch is populated in a column-wise fashion, it is
 /// difficult to maintain a maximum memory footprint without throwing away at least
@@ -2210,13 +2230,13 @@ Status HdfsParquetScanner::AssembleRows(RowBatch* row_batch, bool* skip_row_grou
   if (filter_readers_.empty() || non_filter_readers_.empty()
       || materialization_threshold_ < 0) {
     // Late Materialization is disabled for assembling rows here.
-    return AssembleRowsInternal(column_readers_, row_batch, skip_row_group);
+    return AssembleRowsWithoutLateMaterialization(column_readers_, row_batch,
+        skip_row_group);
   }
 
   int64_t num_rows_read = 0;
   int64_t num_rows_to_skip = 0;
   int64_t last_row_id_processed = -1;
-  bool selected_rows[scratch_batch_->capacity];
   while (!column_readers_[0]->RowGroupAtEnd()) {
     // Start a new scratch batch.
     RETURN_IF_ERROR(scratch_batch_->Reset(state_));
@@ -2233,8 +2253,8 @@ Status HdfsParquetScanner::AssembleRows(RowBatch* row_batch, bool* skip_row_grou
       return fill_status;
     }
     num_rows_read += scratch_batch_->num_tuples;
-    bool row_end = filter_readers_[0]->RowGroupAtEnd();
-    int num_row_to_commit = FilterScratchBatch(row_batch, selected_rows);
+    bool row_group_end = filter_readers_[0]->RowGroupAtEnd();
+    int num_row_to_commit = FilterScratchBatch(row_batch);
     if (num_row_to_commit == 0) {
       // Collect the rows to skip, so that we can skip them together to avoid
       // decompression and decoding. This ensures compressed pages that don't
@@ -2247,7 +2267,6 @@ Status HdfsParquetScanner::AssembleRows(RowBatch* row_batch, bool* skip_row_grou
         RETURN_IF_ERROR(SkipRowsForColumns(
             non_filter_readers_, num_rows_to_skip, last_row_id_processed));
       }
-      Status fill_status;
       int num_tuples;
       if (USES_PAGE_INDEX || num_row_to_commit == scratch_batch_->num_tuples) {
         // When using Page Index, materialize the entire batch. Currently, only avoiding
@@ -2255,11 +2274,12 @@ Status HdfsParquetScanner::AssembleRows(RowBatch* row_batch, bool* skip_row_grou
         // indexes. Other condition is when no filtering happened.
         fill_status =
             FillScratchMicroBatches(non_filter_readers_, row_batch, skip_row_group,
-                &complete_micro_batch_, 1, scratch_batch_->capacity, num_tuples);
+                &complete_micro_batch_, 1 /*'complete_micro_batch' is a single batch */,
+                scratch_batch_->capacity, num_tuples);
       } else {
         ScratchMicroBatch micro_batches[scratch_batch_->capacity];
         int num_micro_batches =
-            ConvertToRange(selected_rows, micro_batches, materialization_threshold_);
+            scratch_batch_->GetMicroBatches(micro_batches, materialization_threshold_);
         fill_status =
             FillScratchMicroBatches(non_filter_readers_, row_batch, skip_row_group,
                 micro_batches, num_micro_batches, scratch_batch_->num_tuples, num_tuples);
@@ -2272,7 +2292,7 @@ Status HdfsParquetScanner::AssembleRows(RowBatch* row_batch, bool* skip_row_grou
     if (scratch_batch_->tuple_byte_size != 0) {
       scratch_batch_->FinalizeTupleTransfer(row_batch, num_row_to_commit);
     }
-    if (row_end) {
+    if (row_group_end) {
       // skip reading for rest of the non-filter column readers now.
       RETURN_IF_ERROR(SkipRowsForColumns(
           non_filter_readers_, num_rows_to_skip, last_row_id_processed));
@@ -2321,47 +2341,6 @@ Status HdfsParquetScanner::SkipRowsForColumns(
   return Status::OK();
 }
 
-int HdfsParquetScanner::ConvertToRange(
-    const bool* selected_rows, ScratchMicroBatch* batches, int skip_length) {
-  int range = 0;
-  int start = -1;
-  int last = -1;
-  const int batch_size = scratch_batch_->num_tuples;
-  DCHECK_GT(batch_size, 0);
-  for (size_t i = 0; i < batch_size; ++i) {
-    if (selected_rows[i]) {
-      if (start == -1) {
-        // start the first ever range
-        start = i;
-        last = i;
-      } else if (i - last < skip_length) {
-        // continue the old range as 'last' is within 'skip_length' of last range.
-        last = i;
-      } else {
-        // start a new range as 'last' is outside 'skip_length' of last range'
-        batches[range].start = start;
-        batches[range].end = last;
-        batches[range].length = last - start + 1;
-        range++;
-        start = i;
-        last = i;
-      }
-    }
-  }
-
-  /// ensure atleast one values above was true.
-  DCHECK(start != -1) << "Atleast one of the selected_rows should be true";
-
-  /// Add the last range which was being built.
-  /// For instance consider batch of size 10 with all true values:
-  /// TTTTTTTTTT or even FFFFFTTTTT. In both cases we would need below.
-  batches[range].start = start;
-  batches[range].end = last;
-  batches[range].length = last - start + 1;
-  range++;
-  return range;
-}
-
 Status HdfsParquetScanner::FillScratchMicroBatches(
     const vector<ParquetColumnReader*>& column_readers, RowBatch* row_batch,
     bool* skip_row_group, const ScratchMicroBatch* micro_batches, int num_micro_batches,
@@ -2374,7 +2353,7 @@ Status HdfsParquetScanner::FillScratchMicroBatches(
   int last_num_tuples[num_micro_batches];
   for (int c = 0; c < column_readers.size(); ++c) {
     ParquetColumnReader* col_reader = column_readers[c];
-    bool continue_execution;
+    bool continue_execution = false;
     int last = -1;
     for (int r = 0; r < num_micro_batches; r++) {
       if (r == 0) {

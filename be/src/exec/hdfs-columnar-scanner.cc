@@ -39,7 +39,7 @@ HdfsColumnarScanner::HdfsColumnarScanner(HdfsScanNodeBase* scan_node,
 
 HdfsColumnarScanner::~HdfsColumnarScanner() {}
 
-int HdfsColumnarScanner::FilterScratchBatch(RowBatch* dst_batch, bool* selected_rows) {
+int HdfsColumnarScanner::FilterScratchBatch(RowBatch* dst_batch) {
   DCHECK_LT(dst_batch->num_rows(), dst_batch->capacity());
   DCHECK_EQ(dst_batch->row_desc()->tuple_descriptors().size(), 1);
   if (scratch_batch_->tuple_byte_size == 0) {
@@ -59,14 +59,14 @@ int HdfsColumnarScanner::FilterScratchBatch(RowBatch* dst_batch, bool* selected_
     DCHECK_EQ(0, scratch_batch_->total_allocated_bytes());
     return num_tuples;
   }
-  return ProcessScratchBatchCodegenOrInterpret(dst_batch, selected_rows);
+  return ProcessScratchBatchCodegenOrInterpret(dst_batch);
 }
 
-int HdfsColumnarScanner::TransferScratchTuples(RowBatch* dst_batch, bool* selected_rows) {
+int HdfsColumnarScanner::TransferScratchTuples(RowBatch* dst_batch) {
   // This function must not be called when the output batch is already full. As long as
   // we always call CommitRows() after TransferScratchTuples(), the output batch can
   // never be empty.
-  const int num_rows_to_commit = FilterScratchBatch(dst_batch, selected_rows);
+  const int num_rows_to_commit = FilterScratchBatch(dst_batch);
   if (scratch_batch_->tuple_byte_size != 0) {
     scratch_batch_->FinalizeTupleTransfer(dst_batch, num_rows_to_commit);
   }
@@ -108,10 +108,10 @@ Status HdfsColumnarScanner::Codegen(HdfsScanPlanNode* node, FragmentState* state
 }
 
 int HdfsColumnarScanner::ProcessScratchBatchCodegenOrInterpret(
-    RowBatch* dst_batch, bool* selected_rows) {
+    RowBatch* dst_batch) {
   return CallCodegendOrInterpreted<ProcessScratchBatchFn>::invoke(this,
       codegend_process_scratch_batch_fn_, &HdfsColumnarScanner::ProcessScratchBatch,
-      dst_batch, selected_rows);
+      dst_batch);
 }
 
 }

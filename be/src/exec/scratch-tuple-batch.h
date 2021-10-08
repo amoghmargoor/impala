@@ -60,6 +60,11 @@ struct ScratchTupleBatch {
   // materialising them.
   const int MIN_SELECTIVITY_TO_COMPACT = 16;
 
+  // Stores bool array of size 'capacity' to signify the rows filtered out by
+  // 'ProcessScratchBatchCodegenOrInterpret'. If i'th tuple survives then
+  // 'selected_rows[i]' would be true else false.
+  boost::scoped_array<bool> selected_rows;
+
   ScratchTupleBatch(
       const RowDescriptor& row_desc, int batch_size, MemTracker* mem_tracker)
     : capacity(batch_size),
@@ -150,6 +155,53 @@ struct ScratchTupleBatch {
       dst_buffer += tuple_byte_size;
     }
     return true;
+  }
+
+  /// Creates ranges of microbatches that needs to be scanned.
+  /// Bits set in 'selected_rows' are the rows that needs to be scanned.
+  /// Consecutive bits set are used to create ranges. Ranges that differ by less than
+  /// 'skip_length', are merged together. E.g., for ranges 1-8, 11-20, 35-100 derived
+  /// from 'scratch_batch_->selected_rows' and 'skip_length' as 10, first two ranges
+  /// would be merged into 1-20 as they differ by 3 (11 - 8) which is less than 10
+  /// ('skip_length'). Precondition for the function is there is atleast one microbatch
+  /// present i.e., atleast one of the 'selected_rows' is true.
+  int GetMicroBatches(ScratchMicroBatch* batches, int skip_length) {
+    int range = 0;
+    int start = -1;
+    int last = -1;
+    const int batch_size = scratch_batch_->num_tuples;
+    DCHECK_GT(batch_size, 0);
+    for (size_t i = 0; i < batch_size; ++i) {
+      if (selected_rows[i]) {
+        if (start == -1) {
+          // start the first ever range
+          start = i;
+          last = i;
+        } else if (i - last < skip_length) {
+          // continue the old range as 'last' is within 'skip_length' of last range.
+          last = i;
+        } else {
+          // start a new range as 'last' is outside 'skip_length' of last range'
+          batches[range].start = start;
+          batches[range].end = last;
+          batches[range].length = last - start + 1;
+          range++;
+          start = i;
+          last = i;
+        }
+      }
+    }
+    /// ensure atleast one values above was true.
+    DCHECK(start != -1) << "Atleast one of the 'scratch_batch_->selected_rows'"
+                        << "should be true";
+    /// Add the last range which was being built.
+    /// For instance consider batch of size 10 with all true values:
+    /// TTTTTTTTTT or even FFFFFTTTTT. In both cases we would need below.
+    batches[range].start = start;
+    batches[range].end = last;
+    batches[range].length = last - start + 1;
+    range++;
+    return range;
   }
 
   Tuple* GetTuple(int tuple_idx) const {

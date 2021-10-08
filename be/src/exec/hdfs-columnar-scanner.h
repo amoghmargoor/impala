@@ -57,22 +57,22 @@ class HdfsColumnarScanner : public HdfsScanner {
   /// Filters out tuples from 'scratch_batch_' and adds the surviving tuples
   /// to the given batch. Finalizing transfer of batch is not done here.
   /// Returns the number of rows that should be committed to the given batch.
-  int FilterScratchBatch(RowBatch* row_batch, bool* selected_rows);
+  int FilterScratchBatch(RowBatch* row_batch);
 
   /// Evaluates runtime filters and conjuncts (if any) against the tuples in
   /// 'scratch_batch_', and adds the surviving tuples to the given batch.
   /// Transfers the ownership of tuple memory to the target batch when the
   /// scratch batch is exhausted.
   /// Returns the number of rows that should be committed to the given batch.
-  int TransferScratchTuples(RowBatch* row_batch, bool* selected_rows);
+  int TransferScratchTuples(RowBatch* row_batch);
 
   /// Processes a single row batch for TransferScratchTuples, looping over scratch_batch_
   /// until it is exhausted or the output is full. Called for the case when there are
   /// materialized tuples. This is a separate function so it can be codegened.
-  int ProcessScratchBatch(RowBatch* dst_batch, bool* selected_rows);
+  int ProcessScratchBatch(RowBatch* dst_batch);
 
  private:
-  int ProcessScratchBatchCodegenOrInterpret(RowBatch* dst_batch, bool* selected_rows);
+  int ProcessScratchBatchCodegenOrInterpret(RowBatch* dst_batch);
 };
 
 }
