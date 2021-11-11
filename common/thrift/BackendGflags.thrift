@@ -215,4 +215,6 @@ struct TBackendGflags {
   95: required bool invalidate_hms_cache_on_ddls
 
   96: required string startup_filesystem_check_directories
+
+  97: required bool enable_shell_based_group_mapping_support
 }
